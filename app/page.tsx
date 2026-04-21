@@ -28,8 +28,8 @@ export default function ReelsCutterPage() {
     });
 
     await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+      wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
     });
     setLoaded(true);
   };
@@ -124,27 +124,29 @@ export default function ReelsCutterPage() {
     <main className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-between py-12 px-6 font-sans">
       
       {/* Top Logo */}
-      <div className="flex flex-col items-center z-10 text-center">
-        <Image src="/logo.png" alt="Logo" width={120} height={40} className="mb-4 opacity-90" />
+      <div className="flex flex-col items-center z-10 text-center space-y-2">
+        <Image src="/logo.png" alt="Logo" width={100} height={30} className="mb-2 opacity-90" />
         <h1 className="text-[12px] tracking-[0.7em] font-bold uppercase italic text-white">Reels Cutter</h1>
-        <p className="text-white/40 text-[7px] tracking-[0.3em] mt-2 uppercase font-light">1080p High-Performance Engine</p>
+        <p className="text-white/40 text-[7px] tracking-[0.3em] uppercase font-light">1080p High-Performance Engine</p>
       </div>
 
       {/* Main Card */}
-      <div className="w-full max-w-[550px] bg-[#0c0c0c] border border-white/[0.05] rounded-[40px] p-10 shadow-[0_0_50px_rgba(0,0,0,0.5)] relative">
-        <div className="absolute -inset-2 bg-[#D4AF37] rounded-[50px] blur-[80px] opacity-[0.03]"></div>
+      <div className="w-full max-w-[550px] bg-[#0c0c0c] border border-white/[0.05] rounded-[40px] p-10 relative group-hover:shadow-[0_0_80px_rgba(212,175,55,0.08)] transition-shadow duration-700">
+        
+        {/* The Golden Glow - appears on hover */}
+        <div className="absolute -inset-2 bg-[#D4AF37] rounded-[50px] blur-[80px] opacity-[0.01] group-hover:opacity-[0.06] transition-opacity duration-700"></div>
         
         <div className="relative flex flex-col items-center">
           
           {/* Custom Upload Area */}
-          <label className="w-full cursor-pointer group">
-            <div className="border-2 border-dashed border-white/10 group-hover:border-white/30 rounded-[30px] py-16 bg-white/[0.01] hover:bg-white/[0.03] flex flex-col items-center justify-center transition-all duration-500">
-              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
-                <svg className="w-6 h-6 text-white/50 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <label className="w-full cursor-pointer group/upload">
+            <div className="border-2 border-dashed border-white/10 group-hover/upload:border-white/30 rounded-[30px] py-16 bg-white/[0.01] hover:bg-white/[0.03] flex flex-col items-center justify-center transition-all duration-500 shadow-inner">
+              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover/upload:scale-110 transition-transform shadow-lg border border-white/5">
+                <svg className="w-6 h-6 text-white/50 group-hover/upload:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
               </div>
-              <span className="text-[9px] uppercase tracking-[0.2em] text-white/50 group-hover:text-white transition-colors">
+              <span className="text-[9px] uppercase tracking-[0.2em] text-white/50 group-hover/upload:text-white transition-colors">
                 {videoFile ? videoFile.name : "Select 4K Source Video"}
               </span>
             </div>
@@ -160,7 +162,7 @@ export default function ReelsCutterPage() {
               </div>
               <div className="w-full h-[2px] bg-white/5 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-[#D4AF37] shadow-[0_0_10px_#D4AF37] transition-all duration-500" 
+                  className="h-full bg-[#D4AF37] shadow-[0_0_15px_#D4AF37] transition-all duration-500" 
                   style={{ width: `${progress}%` }}
                 ></div>
               </div>
@@ -174,7 +176,7 @@ export default function ReelsCutterPage() {
             className={`w-full mt-10 py-5 rounded-[22px] uppercase tracking-[0.3em] text-[10px] font-black transition-all
               ${!videoFile ? 'bg-white/5 text-white/20 border border-white/5' : 
                 processing ? 'bg-white/10 text-white animate-pulse' : 
-                'bg-[#D4AF37] text-black shadow-[0_10px_30px_rgba(212,175,55,0.25)] hover:scale-[1.02] active:scale-[0.98]'}
+                'bg-[#D4AF37] text-black shadow-[0_10px_40px_rgba(212,175,55,0.2)] hover:scale-[1.01] active:scale-[0.99]'}
             `}
           >
             {processing ? "Rendering..." : "Generate Pro Reel"}
@@ -183,11 +185,12 @@ export default function ReelsCutterPage() {
       </div>
 
       {/* Footer */}
-      <div className="flex flex-col items-center gap-4">
-        <Image src="/label_logo.jpg" alt="deVee Logo" width={30} height={30} className="rounded-full opacity-50 grayscale hover:grayscale-0 transition-all duration-700" />
-        <footer className="text-[8px] tracking-[0.2em] font-light text-white/50 uppercase">
+      <div className="flex flex-col items-center gap-2 mt-4 space-y-2">
+        <footer className="text-[8px] tracking-[0.3em] font-light text-white/70 uppercase mb-2">
           Powered By deVee Boutique Label
         </footer>
+        {/* Smaller, original colored logo */}
+        <Image src="/label_logo.jpg" alt="deVee Logo" width={25} height={25} className="rounded-full opacity-100 hover:scale-110 transition-transform duration-500" />
       </div>
 
     </main>
