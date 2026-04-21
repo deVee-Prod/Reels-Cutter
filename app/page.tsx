@@ -70,7 +70,7 @@ export default function ReelsCutterPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-between py-12 px-6 font-sans overflow-hidden">
+    <main className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-between py-20 px-6 font-sans overflow-hidden">
       
       {/* Top Logo Section */}
       <div className="flex flex-col items-center z-10 text-center space-y-2">
@@ -132,7 +132,7 @@ export default function ReelsCutterPage() {
               className={`w-full mt-10 py-5 rounded-[22px] uppercase tracking-[0.3em] text-[10px] font-black transition-all
                 ${!videoFile ? 'bg-white/5 text-white/20 border border-white/5' : 
                   processing ? 'bg-white/10 text-white animate-pulse' : 
-                  'bg-[#D4AF37] text-black shadow-[0_10px_40px_rgba(212,175,55,0.25)] hover:scale-[1.02] active:scale-[0.98]'}
+                  'bg-[#D4AF37] !text-black shadow-[0_10px_40px_rgba(212,175,55,0.25)] hover:scale-[1.02] active:scale-[0.98]'}
               `}
               style={{ color: videoFile && !processing ? '#000000' : undefined }}
             >
