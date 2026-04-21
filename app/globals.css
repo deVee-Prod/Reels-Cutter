@@ -4,7 +4,8 @@
   --background: #050505;
   --foreground: #ffffff;
   --devee-gold: #D4AF37;
-  --devee-gold-glow: rgba(212, 175, 55, 0.3);
+  /* צבע זהב דרמטי יותר ל-Glow (פחות שקוף) */
+  --devee-gold-glow-dramatic: rgba(212, 175, 55, 0.4);
 }
 
 body {
@@ -15,25 +16,35 @@ body {
   padding: 0;
 }
 
-/* 1. הילה זהובה קבועה מסביב לכרטיס המרכזי */
+/* הכרטיס המרכזי - ה-Glow הדרמטי */
 .group {
-  box-shadow: 0 0 40px rgba(212, 175, 55, 0.05);
+  position: relative;
   transition: all 0.8s ease-in-out;
   border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  /* אפקט עומק בסיסי */
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
 }
 
-/* ה-Glow הזהוב שביקשת כשמתקרבים עם העכבר */
+/* 1. ה-Glow המוזהב והדרמטי כשמעבירים עכבר */
 .group:hover {
-  box-shadow: 0 0 80px rgba(212, 175, 55, 0.15) !important;
+  /* הילה זהובה, חזקה וגדולה הרבה יותר */
+  box-shadow: 0 0 100px var(--devee-gold-glow-dramatic), 
+              0 0 50px rgba(212, 175, 55, 0.2) !important;
   border-color: rgba(212, 175, 55, 0.3) !important;
 }
 
-/* 2. כפתור ה-Generate והאלמנטים המרכזיים בזהב */
+/* 2. כפתור ה-Generate בזהב (כפי שביקשת) */
 button, .bg-\[\#D4AF37\] {
   background-color: var(--devee-gold) !important;
   color: #000000 !important;
   font-weight: 900 !important;
   box-shadow: 0 10px 30px rgba(212, 175, 55, 0.3) !important;
+  transition: all 0.3s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 15px 40px rgba(212, 175, 55, 0.4) !important;
 }
 
 /* 3. ה-Progress Bar גם בזהב */
@@ -49,7 +60,7 @@ footer, .footer-text {
   letter-spacing: 0.2em;
 }
 
-/* הילה פנימית לאזור ההעלאה */
+/* הילה פנימית קלה לאזור ההעלאה */
 .group\/upload:hover {
   background-color: rgba(212, 175, 55, 0.03) !important;
   border-color: rgba(212, 175, 55, 0.2) !important;
