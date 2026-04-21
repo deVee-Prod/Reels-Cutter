@@ -8,8 +8,10 @@ import { randomUUID } from 'crypto';
 
 const execAsync = promisify(exec);
 
-// כאן נגלה אם ל-Vercel יש FFmpeg מובנה (לפעמים יש להם בסביבת הריצה)
+// ב-Vercel ה-FFmpeg מותקן בנתיב הסטנדרטי
 const FFMPEG_PATH = process.env.VERCEL ? 'ffmpeg' : (process.env.FFMPEG_PATH ?? '/opt/homebrew/bin/ffmpeg');
+const FFPROBE_PATH = process.env.VERCEL ? 'ffprobe' : '/opt/homebrew/bin/ffprobe';
+
 const TMP_DIR = process.env.VERCEL ? '/tmp' : join(process.cwd(), 'tmp');
 
 async function ensureTmpDir() {
@@ -42,9 +44,14 @@ export async function POST(req: NextRequest) {
   await writeFile(inputPath, Buffer.from(await videoFile.arrayBuffer()));
 
   try {
+    // 1. בדיקת רזולוציה כדי לחסוך זמן ב-Vercel
+    const { stdout: probeOut } = await execAsync(`"${FFPROBE_PATH}" -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "${inputPath}"`);
+    const width = parseInt(probeOut.trim());
+    const needsScale = width > 1080;
+
+    // 2. בניית הפילטרים
     let filterComplex = '';
     let concatInputs = '';
-    
     segments.forEach((seg, i) => {
       const start = seg.start.toFixed(3);
       const endOpt = seg.end !== null ? `:end=${seg.end.toFixed(3)}` : '';
@@ -54,8 +61,10 @@ export async function POST(req: NextRequest) {
     });
 
     filterComplex += `${concatInputs}concat=n=${segments.length}:v=1:a=1[vraw][outa];`;
-    filterComplex += `[vraw]scale=1080:-2:flags=bilinear[outv]`;
+    // אם לא צריך הקטנה, פשוט מעבירים את הוידאו הלאה
+    filterComplex += needsScale ? `[vraw]scale=1080:-2:flags=bilinear[outv]` : `[vraw]copy[outv]`;
 
+    // 3. הרצה מהירה במיוחד
     const cmd = [
       `"${FFMPEG_PATH}"`,
       '-y',
@@ -69,7 +78,7 @@ export async function POST(req: NextRequest) {
       '-tune', 'zerolatency',
       '-crf', '22',
       '-c:a', 'aac',
-      '-b:a', '128k',
+      '-b:a', '128k', // הורדה קלה בביטרייט של האודיו לטובת מהירות
       '-movflags', '+faststart',
       `"${outputPath}"`
     ].join(' ');

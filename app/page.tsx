@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import Image from 'next/image';
 
 export default function ReelsCutterPage() {
   const [loaded, setLoaded] = useState(false);
@@ -82,7 +83,6 @@ export default function ReelsCutterPage() {
       segments.forEach((seg, i) => {
         const start = seg.start.toFixed(3);
         const endOpt = seg.end !== null ? `:end=${seg.end.toFixed(3)}` : '';
-        // עדכון לרזולוציית 1080p
         filterComplex += `[0:v]trim=start=${start}${endOpt},setpts=PTS-STARTPTS,fps=30,scale=1080:-2[v${i}];`;
         filterComplex += `[0:a]atrim=start=${start}${endOpt},asetpts=PTS-STARTPTS[a${i}];`;
         concatInputs += `[v${i}][a${i}]`;
@@ -96,7 +96,7 @@ export default function ReelsCutterPage() {
         '-map', '[outa]',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
-        '-crf', '24', // שיפור איכות ל-1080p
+        '-crf', '24',
         '-c:a', 'aac',
         '-b:a', '128k',
         outputName
@@ -121,68 +121,75 @@ export default function ReelsCutterPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-between py-12 px-6 font-sans overflow-hidden">
+    <main className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-between py-12 px-6 font-sans">
       
-      {/* Header */}
+      {/* Top Logo */}
       <div className="flex flex-col items-center z-10 text-center">
+        <Image src="/logo.png" alt="Logo" width={120} height={40} className="mb-4 opacity-90" />
         <h1 className="text-[12px] tracking-[0.7em] font-bold uppercase italic text-white">Reels Cutter</h1>
-        <p className="text-white/60 text-[7px] tracking-[0.3em] mt-2 uppercase font-light">1080p High-Performance Engine</p>
+        <p className="text-white/40 text-[7px] tracking-[0.3em] mt-2 uppercase font-light">1080p High-Performance Engine</p>
       </div>
 
       {/* Main Card */}
-      <div className="w-full max-w-[550px] bg-[#0c0c0c] border border-white/[0.05] rounded-[40px] p-10 shadow-2xl relative">
-        <div className="absolute -inset-2 bg-[#D4AF37] rounded-[50px] blur-[60px] opacity-[0.03]"></div>
+      <div className="w-full max-w-[550px] bg-[#0c0c0c] border border-white/[0.05] rounded-[40px] p-10 shadow-[0_0_50px_rgba(0,0,0,0.5)] relative">
+        <div className="absolute -inset-2 bg-[#D4AF37] rounded-[50px] blur-[80px] opacity-[0.03]"></div>
         
         <div className="relative flex flex-col items-center">
           
-          {/* Upload Button/Zone */}
+          {/* Custom Upload Area */}
           <label className="w-full cursor-pointer group">
-            <div className="border border-white/10 group-hover:border-white/30 rounded-[30px] py-16 bg-white/[0.02] hover:bg-white/[0.04] flex flex-col items-center justify-center transition-all duration-500 shadow-inner">
-              <svg className="w-8 h-8 text-white/40 group-hover:text-white mb-4 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              <span className="text-[10px] uppercase tracking-[0.2em] text-white/70 group-hover:text-white transition-colors">
+            <div className="border-2 border-dashed border-white/10 group-hover:border-white/30 rounded-[30px] py-16 bg-white/[0.01] hover:bg-white/[0.03] flex flex-col items-center justify-center transition-all duration-500">
+              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg">
+                <svg className="w-6 h-6 text-white/50 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              </div>
+              <span className="text-[9px] uppercase tracking-[0.2em] text-white/50 group-hover:text-white transition-colors">
                 {videoFile ? videoFile.name : "Select 4K Source Video"}
               </span>
             </div>
             <input type="file" className="hidden" onChange={handleFileUpload} accept="video/*" />
           </label>
 
-          {/* Processing Status */}
+          {/* Progress Section */}
           {processing && (
             <div className="w-full mt-8 px-2">
-              <div className="flex justify-between text-[8px] uppercase tracking-[0.15em] text-white mb-3 font-medium">
+              <div className="flex justify-between text-[7px] uppercase tracking-[0.1em] text-white/60 mb-2">
                 <span className="animate-pulse">{status}</span>
                 <span>{progress}%</span>
               </div>
-              <div className="w-full h-[2px] bg-white/10 rounded-full overflow-hidden">
+              <div className="w-full h-[2px] bg-white/5 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-[#D4AF37] transition-all duration-500 shadow-[0_0_10px_#D4AF37]" 
+                  className="h-full bg-[#D4AF37] shadow-[0_0_10px_#D4AF37] transition-all duration-500" 
                   style={{ width: `${progress}%` }}
                 ></div>
               </div>
             </div>
           )}
 
-          {/* Generate Button */}
+          {/* Action Button */}
           <button 
             onClick={processVideo}
             disabled={!loaded || processing || !videoFile}
-            className={`w-full mt-10 py-5 rounded-[20px] uppercase tracking-[0.2em] text-[10px] font-bold transition-all duration-500
-              ${!videoFile ? 'bg-white/5 text-white/40' : 
-                processing ? 'bg-white/10 text-white border border-white/20' : 
-                'bg-[#D4AF37] text-black hover:scale-[1.02] shadow-[0_10px_30px_rgba(212,175,55,0.2)]'}
+            className={`w-full mt-10 py-5 rounded-[22px] uppercase tracking-[0.3em] text-[10px] font-black transition-all
+              ${!videoFile ? 'bg-white/5 text-white/20 border border-white/5' : 
+                processing ? 'bg-white/10 text-white animate-pulse' : 
+                'bg-[#D4AF37] text-black shadow-[0_10px_30px_rgba(212,175,55,0.25)] hover:scale-[1.02] active:scale-[0.98]'}
             `}
           >
-            {processing ? "Rendering 1080p..." : "Generate Pro Reel"}
+            {processing ? "Rendering..." : "Generate Pro Reel"}
           </button>
         </div>
       </div>
 
       {/* Footer */}
-      <footer className="opacity-70 text-[9px] tracking-[0.15em] font-light text-white uppercase">
-        Powered By deVee Boutique Label
-      </footer>
+      <div className="flex flex-col items-center gap-4">
+        <Image src="/label_logo.jpg" alt="deVee Logo" width={30} height={30} className="rounded-full opacity-50 grayscale hover:grayscale-0 transition-all duration-700" />
+        <footer className="text-[8px] tracking-[0.2em] font-light text-white/50 uppercase">
+          Powered By deVee Boutique Label
+        </footer>
+      </div>
+
     </main>
   );
 }
