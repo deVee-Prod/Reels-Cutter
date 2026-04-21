@@ -79,12 +79,17 @@ export default function ReelsCutterPage() {
         <p className="text-white/40 text-[7px] tracking-[0.3em] uppercase font-light">Pro High-Performance Engine</p>
       </div>
 
-      <div className="w-full max-w-[550px] flex flex-col items-center gap-6">
+      <div className="w-full max-w-[550px] flex flex-col items-center gap-4">
         
-        {/* Device Optimization Hint */}
-        <p className="text-[8px] tracking-[0.2em] text-[#D4AF37] uppercase font-medium opacity-80">
-          Optimized for iPhone • Desktop slow-down may occur
-        </p>
+        {/* Unified Pro Recommendations */}
+        <div className="flex flex-col items-center text-center space-y-1 mb-2 opacity-80">
+          <p className="text-[8px] tracking-[0.15em] text-[#D4AF37] uppercase font-bold">
+            iPhone Optimized • Use 1080p for faster render
+          </p>
+          <p className="text-[6px] tracking-[0.2em] text-white/30 uppercase">
+            Instagram & TikTok standard quality • Auto-compression enabled
+          </p>
+        </div>
 
         {/* Interface Card */}
         <div className="w-full bg-[#0c0c0c] border border-white/[0.05] rounded-[40px] p-10 relative group shadow-[0_0_50px_rgba(0,0,0,0.5)]">
@@ -129,6 +134,7 @@ export default function ReelsCutterPage() {
                   processing ? 'bg-white/10 text-white animate-pulse' : 
                   'bg-[#D4AF37] text-black shadow-[0_10px_40px_rgba(212,175,55,0.25)] hover:scale-[1.02] active:scale-[0.98]'}
               `}
+              style={{ color: videoFile && !processing ? '#000000' : undefined }}
             >
               {processing ? "Rendering..." : "Generate Pro Reel"}
             </button>
@@ -136,13 +142,13 @@ export default function ReelsCutterPage() {
         </div>
       </div>
 
-     {/* Footer Branding Section */}
-<div className="flex flex-col items-center gap-4 mt-2">
-  <p className="footer-text text-[7px] tracking-[0.15em] font-light text-white/50 uppercase">
-    Powered By deVee Boutique Label
-  </p>
-  <Image src="/label_logo.jpg" alt="deVee Label" width={32} height={32} className="rounded-full opacity-100 shadow-xl" />
-</div>
+      {/* Footer Branding */}
+      <div className="flex flex-col items-center gap-4 mt-2">
+        <p className="footer-text text-[7px] tracking-[0.15em] font-light text-white/50 uppercase">
+          Powered By deVee Boutique Label
+        </p>
+        <Image src="/label_logo.jpg" alt="deVee Label" width={32} height={32} className="rounded-full opacity-100 shadow-xl" />
+      </div>
 
     </main>
   );
