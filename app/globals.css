@@ -4,64 +4,36 @@
   --background: #050505;
   --foreground: #ffffff;
   --devee-gold: #D4AF37;
-  /* צבע זהב דרמטי יותר ל-Glow (פחות שקוף) */
-  --devee-gold-glow-dramatic: rgba(212, 175, 55, 0.4);
 }
 
 body {
   background: var(--background) !important;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
-  margin: 0;
-  padding: 0;
 }
 
-/* הכרטיס המרכזי - ה-Glow הדרמטי */
+/* ה-Glow הדרמטי של deVee */
 .group {
-  position: relative;
-  transition: all 0.8s ease-in-out;
-  border: 1px solid rgba(255, 255, 255, 0.05) !important;
-  /* אפקט עומק בסיסי */
-  box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.03) !important;
 }
 
-/* 1. ה-Glow המוזהב והדרמטי כשמעבירים עכבר */
 .group:hover {
-  /* הילה זהובה, חזקה וגדולה הרבה יותר */
-  box-shadow: 0 0 100px var(--devee-gold-glow-dramatic), 
-              0 0 50px rgba(212, 175, 55, 0.2) !important;
-  border-color: rgba(212, 175, 55, 0.3) !important;
+  /* שכבת הילה כפולה לדרמטיות מקסימלית */
+  box-shadow: 0 0 80px rgba(212, 175, 55, 0.15), 
+              0 0 30px rgba(212, 175, 55, 0.1) !important;
+  border-color: rgba(212, 175, 55, 0.25) !important;
 }
 
-/* 2. כפתור ה-Generate בזהב (כפי שביקשת) */
-button, .bg-\[\#D4AF37\] {
-  background-color: var(--devee-gold) !important;
-  color: #000000 !important;
-  font-weight: 900 !important;
-  box-shadow: 0 10px 30px rgba(212, 175, 55, 0.3) !important;
-  transition: all 0.3s ease;
-}
-
-button:hover:not(:disabled) {
-  transform: scale(1.02);
-  box-shadow: 0 15px 40px rgba(212, 175, 55, 0.4) !important;
-}
-
-/* 3. ה-Progress Bar גם בזהב */
-.bg-\[\#D4AF37\].h-full {
-  background-color: var(--devee-gold) !important;
-  box-shadow: 0 0 15px var(--devee-gold) !important;
-}
-
-/* 4. תיקון הפונט בפוטר (גם וגם) */
-footer, .footer-text {
+/* עיצוב פונט הפוטר כמו ב-BPM Calculator */
+.footer-text {
   text-transform: none !important;
   font-variant: normal !important;
-  letter-spacing: 0.2em;
+  opacity: 0.6;
 }
 
-/* הילה פנימית קלה לאזור ההעלאה */
-.group\/upload:hover {
-  background-color: rgba(212, 175, 55, 0.03) !important;
-  border-color: rgba(212, 175, 55, 0.2) !important;
+/* צבע הזהב לכפתור והפרוגרס */
+button, .bg-\[\#D4AF37\] {
+  background-color: var(--devee-gold) !important;
+  box-shadow: 0 10px 30px rgba(212, 175, 55, 0.2) !important;
 }

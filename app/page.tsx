@@ -27,7 +27,6 @@ export default function ReelsCutterPage() {
       setProgress(Math.round(progress * 100));
     });
 
-    // התיקון כאן: שימוש בנקודותיים (:) במקום שווה (=)
     await ffmpeg.load({
       coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
       wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
@@ -122,20 +121,21 @@ export default function ReelsCutterPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-between py-12 px-6 font-sans">
+    <main className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-between py-12 px-6 font-sans overflow-hidden">
       
-      {/* Top Logo */}
+      {/* Top Logo Section */}
       <div className="flex flex-col items-center z-10 text-center space-y-2">
-        <Image src="/logo.png" alt="Logo" width={100} height={30} className="mb-2 opacity-90" />
+        <Image src="/logo.png" alt="Logo" width={110} height={35} className="mb-2 opacity-90" />
         <h1 className="text-[12px] tracking-[0.7em] font-bold uppercase italic text-white">Reels Cutter</h1>
         <p className="text-white/40 text-[7px] tracking-[0.3em] uppercase font-light">1080p High-Performance Engine</p>
       </div>
 
-      {/* Main Card */}
+      {/* Interface Card */}
       <div className="w-full max-w-[550px] bg-[#0c0c0c] border border-white/[0.05] rounded-[40px] p-10 relative group shadow-[0_0_50px_rgba(0,0,0,0.5)]">
         
-        {/* Golden Glow - Based on UI requests */}
-        <div className="absolute -inset-2 bg-[#D4AF37] rounded-[50px] blur-[80px] opacity-[0.03] group-hover:opacity-[0.06] transition-opacity duration-700"></div>
+        {/* Double Golden Glow - For dramatic BPM style effect */}
+        <div className="absolute -inset-2 bg-[#D4AF37] rounded-[50px] blur-[80px] opacity-[0.02] group-hover:opacity-[0.12] transition-opacity duration-1000"></div>
+        <div className="absolute inset-0 bg-[#D4AF37] rounded-[40px] blur-[20px] opacity-0 group-hover:opacity-[0.05] transition-opacity duration-700"></div>
         
         <div className="relative flex flex-col items-center">
           
@@ -182,12 +182,12 @@ export default function ReelsCutterPage() {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="flex flex-col items-center gap-2 mt-4">
-        <footer className="text-[8px] tracking-[0.3em] font-light text-white/70 uppercase">
+      {/* Footer Branding - BPM Calculator Style */}
+      <div className="flex flex-col items-center gap-4 mt-2">
+        <p className="footer-text text-[7px] tracking-[0.4em] font-light text-white/50">
           Powered By deVee Boutique Label
-        </footer>
-        <Image src="/label_logo.jpg" alt="deVee Logo" width={25} height={25} className="rounded-full opacity-100" />
+        </p>
+        <Image src="/label_logo.jpg" alt="deVee Label" width={32} height={32} className="rounded-full opacity-100 shadow-xl" />
       </div>
 
     </main>
