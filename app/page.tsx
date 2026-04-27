@@ -53,14 +53,20 @@ export default function ReelsCutterPage() {
       segments.push({ start: lastEnd, end: null });
       setStatus("Rendering 1080p Pro Mode...");
       let filterComplex = ''; let concatInputs = '';
+
+      // ✅ שינוי: trim בלבד בלולאה — ללא scale/fps
       segments.forEach((seg, i) => {
         const start = seg.start.toFixed(3);
         const endOpt = seg.end !== null ? `:end=${seg.end.toFixed(3)}` : '';
-        filterComplex += `[0:v]trim=start=${start}${endOpt},setpts=PTS-STARTPTS,fps=30,scale=1080:-2[v${i}];`;
+        filterComplex += `[0:v]trim=start=${start}${endOpt},setpts=PTS-STARTPTS[v${i}];`;
         filterComplex += `[0:a]atrim=start=${start}${endOpt},asetpts=PTS-STARTPTS[a${i}];`;
         concatInputs += `[v${i}][a${i}]`;
       });
-      filterComplex += `${concatInputs}concat=n=${segments.length}:v=1:a=1[outv][outa]`;
+
+      // ✅ שינוי: scale + fps פעם אחת בלבד אחרי ה-concat
+      filterComplex += `${concatInputs}concat=n=${segments.length}:v=1:a=1[vraw][outa];`;
+      filterComplex += `[vraw]fps=30,scale=1080:-2[outv]`;
+
       await ffmpeg.exec(['-i', inputName, '-filter_complex', filterComplex, '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24', '-c:a', 'aac', '-b:a', '128k', outputName]);
       setStatus("Done!"); setProgress(100);
       const data = await ffmpeg.readFile(outputName);
