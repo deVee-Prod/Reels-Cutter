@@ -17,10 +17,12 @@ export default function ReelsCutterPage() {
   const [segments, setSegments] = useState<{ start: number; end: number | null }[] | null>(null);
   const [duration, setDuration] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<number>(0);
+  const [zoom, setZoom] = useState(1);
 
   const ffmpegRef = useRef<any>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const timelineContainerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<{ index: number; edge: 'start' | 'end' } | null>(null);
   const segmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const segmentsRef = useRef<{ start: number; end: number | null }[] | null>(null);
@@ -40,6 +42,15 @@ export default function ReelsCutterPage() {
   useEffect(() => { segmentsRef.current = segments; }, [segments]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => () => { if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current); }, []);
+
+  useEffect(() => {
+    const c = timelineContainerRef.current;
+    if (!c || zoom <= 1 || !duration) return;
+    const cw = c.clientWidth;
+    const ph = (currentTime / duration) * cw * zoom;
+    if (ph < c.scrollLeft + 40 || ph > c.scrollLeft + cw - 40)
+      c.scrollLeft = Math.max(0, ph - cw * 0.25);
+  }, [currentTime, zoom, duration]);
 
   const clearSegmentTimer = () => {
     if (segmentTimerRef.current !== null) {
@@ -255,74 +266,88 @@ export default function ReelsCutterPage() {
                 </div>
                 
                 {segments && (
-                  <div className="w-full mb-6 space-y-2">
+                  <div className="w-full mb-6 space-y-3">
 
-                    {/* ── Delete buttons – centered above each segment ── */}
-                    <div className="relative w-full h-4">
-                      {segments.map((seg, i) => (
+                    {/* ── Zoom controls ── */}
+                    <div className="flex items-center justify-between px-0.5">
+                      <span className="text-white/25 text-[7px] uppercase tracking-[0.2em]">Edit</span>
+                      <div className="flex items-center gap-2">
                         <button
-                          key={i}
-                          className="absolute -translate-x-1/2 flex items-center justify-center w-4 h-4 rounded-full bg-red-500/20 hover:bg-red-500/55 text-red-400 hover:text-white text-[10px] font-black transition-all leading-none border border-red-500/30 hover:border-red-500/60"
-                          style={{ left: `${(((seg.start + (seg.end ?? duration)) / 2) / duration) * 100}%` }}
-                          onClick={() => setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev)}
-                        >×</button>
-                      ))}
+                          onClick={() => { setZoom(z => Math.max(1, z / 2)); if (zoom <= 2 && timelineContainerRef.current) timelineContainerRef.current.scrollLeft = 0; }}
+                          className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors"
+                        >−</button>
+                        <span className="text-white/30 text-[9px] w-5 text-center">{zoom}×</span>
+                        <button
+                          onClick={() => setZoom(z => Math.min(16, z * 2))}
+                          className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors"
+                        >+</button>
+                      </div>
                     </div>
 
-                    {/* ── Segments timeline – drag handles only ── */}
-                    <div ref={timelineRef} className="relative h-36 md:h-14 bg-white/[0.03] rounded-xl border border-white/10 overflow-hidden">
-                      {segments.map((seg, i) => (
-                        <div
-                          key={i}
-                          className="absolute h-full bg-[#D4AF37]/50 border-x border-[#D4AF37] cursor-ew-resize"
-                          style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%`, touchAction: 'none' }}
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            e.currentTarget.setPointerCapture(e.pointerId);
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const edge = (e.clientX - rect.left) < rect.width / 2 ? 'start' : 'end';
-                            draggingRef.current = { index: i, edge };
-                          }}
-                          onPointerMove={(e) => {
-                            if (!draggingRef.current || !timelineRef.current) return;
-                            const rect = timelineRef.current.getBoundingClientRect();
-                            const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-                            const t = (x / rect.width) * duration;
-                            const { edge } = draggingRef.current;
-                            setSegments(prev => prev ? prev.map((s, idx) => {
-                              if (idx !== i) return s;
-                              if (edge === 'start') return { ...s, start: Math.min(t, (s.end ?? duration) - 0.1) };
-                              return { ...s, end: Math.max(t, s.start + 0.1) };
-                            }) : prev);
-                            if (videoRef.current) videoRef.current.currentTime = t;
-                          }}
-                          onPointerUp={(e) => {
-                            e.currentTarget.releasePointerCapture(e.pointerId);
-                            draggingRef.current = null;
-                            if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime);
-                          }}
-                        >
-                          <div className="absolute left-0 top-0 h-full w-5 flex items-center justify-center pointer-events-none">
-                            <div className="flex flex-col gap-[3px]">
-                              <div className="w-[2px] h-[5px] rounded-full bg-[#D4AF37]" />
-                              <div className="w-[2px] h-[5px] rounded-full bg-[#D4AF37]" />
-                              <div className="w-[2px] h-[5px] rounded-full bg-[#D4AF37]" />
-                            </div>
+                    {/* ── Scrollable timeline container ── */}
+                    <div ref={timelineContainerRef} className="w-full overflow-x-auto rounded-xl" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+                      <div
+                        ref={timelineRef}
+                        className="relative h-36 md:h-16 bg-white/[0.03] border border-white/10 rounded-xl"
+                        style={{ width: `${zoom * 100}%`, minWidth: '100%', touchAction: zoom > 1 ? 'pan-x' : 'none' }}
+                      >
+                        {/* Delete buttons row inside scrollable content */}
+                        {segments.map((seg, i) => (
+                          <button
+                            key={`del-${i}`}
+                            className="absolute top-1 -translate-x-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-red-500/20 hover:bg-red-500/60 text-red-400 hover:text-white text-[11px] font-black transition-all leading-none border border-red-500/30 z-20"
+                            style={{ left: `${(((seg.start + (seg.end ?? duration)) / 2) / duration) * 100}%` }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => { e.stopPropagation(); setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev); }}
+                          >×</button>
+                        ))}
+
+                        {/* Segment bars */}
+                        {segments.map((seg, i) => (
+                          <div
+                            key={i}
+                            className="absolute top-7 bottom-1 cursor-ew-resize"
+                            style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%`, touchAction: 'none' }}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              e.currentTarget.setPointerCapture(e.pointerId);
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              draggingRef.current = { index: i, edge: (e.clientX - rect.left) < rect.width / 2 ? 'start' : 'end' };
+                            }}
+                            onPointerMove={(e) => {
+                              if (!draggingRef.current || !timelineRef.current) return;
+                              const rect = timelineRef.current.getBoundingClientRect();
+                              const t = Math.max(0, Math.min(e.clientX - rect.left, rect.width)) / rect.width * duration;
+                              const { edge } = draggingRef.current;
+                              setSegments(prev => prev ? prev.map((s, idx) => {
+                                if (idx !== i) return s;
+                                if (edge === 'start') return { ...s, start: Math.min(t, (s.end ?? duration) - 0.1) };
+                                return { ...s, end: Math.max(t, s.start + 0.1) };
+                              }) : prev);
+                              if (videoRef.current) videoRef.current.currentTime = t;
+                            }}
+                            onPointerUp={(e) => {
+                              e.currentTarget.releasePointerCapture(e.pointerId);
+                              draggingRef.current = null;
+                              if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime);
+                            }}
+                          >
+                            {/* Left solid handle */}
+                            <div className="absolute left-0 top-0 h-full w-3 bg-[#D4AF37] rounded-l-sm pointer-events-none" />
+                            {/* Center body */}
+                            <div className="absolute left-3 right-3 top-0 bottom-0 bg-[#D4AF37]/30 pointer-events-none" />
+                            {/* Right solid handle */}
+                            <div className="absolute right-0 top-0 h-full w-3 bg-[#D4AF37] rounded-r-sm pointer-events-none" />
                           </div>
-                          <div className="absolute right-0 top-0 h-full w-5 flex items-center justify-center pointer-events-none">
-                            <div className="flex flex-col gap-[3px]">
-                              <div className="w-[2px] h-[5px] rounded-full bg-[#D4AF37]" />
-                              <div className="w-[2px] h-[5px] rounded-full bg-[#D4AF37]" />
-                              <div className="w-[2px] h-[5px] rounded-full bg-[#D4AF37]" />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      <div className="absolute top-0 bottom-0 w-px bg-white/20" style={{ left: `${(currentTime / duration) * 100}%`, pointerEvents: 'none' }} />
+                        ))}
+
+                        {/* Playhead */}
+                        <div className="absolute top-0 bottom-0 w-px bg-white/30 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }} />
+                      </div>
                     </div>
 
-                    {/* ── Seek bar – video navigation only ── */}
+                    {/* ── Seek bar ── */}
                     <div
                       ref={seekBarRef}
                       className="relative w-full h-10 md:h-6 flex items-center cursor-pointer"
