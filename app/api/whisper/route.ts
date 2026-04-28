@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
   if (!audioFile) return NextResponse.json({ error: 'Missing audio' }, { status: 400 });
 
   try {
-    // שולחים ישירות ל-Whisper — ה-mp3 כבר מוכן מהלקוח
     const whisperForm = new FormData();
     whisperForm.append('file', audioFile, 'audio.mp3');
     whisperForm.append('model', 'whisper-1');
@@ -31,9 +30,25 @@ export async function POST(req: NextRequest) {
     }
 
     const whisperData = await whisperRes.json();
-    const words: { start: number; end: number }[] = whisperData.words ?? [];
+    const words: { word: string; start: number; end: number }[] = whisperData.words ?? [];
+
+    // ─── DEBUG ───────────────────────────────────────────────
+    console.log('=== WHISPER DEBUG ===');
+    console.log('Total words:', words.length);
+    console.log('Duration:', whisperData.duration);
+    words.forEach((w, i) => {
+      const gap = i > 0 ? (w.start - words[i - 1].end).toFixed(2) : '0';
+      console.log(`[${i}] "${w.word}" ${w.start.toFixed(2)}s → ${w.end.toFixed(2)}s | gap before: ${gap}s`);
+    });
+    // ─────────────────────────────────────────────────────────
 
     const segments = buildSpeechSegments(words, 0.4);
+
+    console.log('=== SEGMENTS ===');
+    segments.forEach((s, i) => {
+      console.log(`[${i}] start: ${s.start.toFixed(2)}s end: ${s.end !== null ? s.end.toFixed(2) + 's' : 'END'}`);
+    });
+
     return NextResponse.json({ segments });
 
   } catch (e: any) {
