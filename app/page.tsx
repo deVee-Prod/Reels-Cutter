@@ -60,28 +60,41 @@ export default function ReelsCutterPage() {
     };
   }, [duration]);
 
-  // לוגיקה לזרימה רציפה (דילוג על שתיקות)
+  // לוגיקה לזרימה רציפה (דילוג על שתיקות) - גרסה חלקה ומשופרת
   const handleTimeUpdate = () => {
-    if (!videoRef.current) return;
-    const time = videoRef.current.currentTime;
+    if (!videoRef.current || !segments || processing) return;
+    
+    const video = videoRef.current;
+    const time = video.currentTime;
     setCurrentTime(time);
     
-    if (!videoRef.current.paused && segments) {
-      let inSegment = false;
-      let nextStart: number | null = null;
-      for (const seg of segments) {
-        const end = seg.end ?? duration;
-        if (time >= seg.start && time <= end) {
-          inSegment = true;
-          break;
+    if (!video.paused) {
+      // מוצאים את הסגמנט הנוכחי בו נמצא הסמן
+      const currentSeg = segments.find(seg => time >= seg.start && time <= (seg.end ?? duration));
+      
+      if (!currentSeg) {
+        // אם אנחנו בשטח "שחור", קופצים לסגמנט הבא הכי קרוב
+        const nextSeg = segments
+          .filter(seg => seg.start > time)
+          .sort((a, b) => a.start - b.start)[0];
+          
+        if (nextSeg) {
+          video.currentTime = nextSeg.start;
+        } else {
+          // אם אין יותר סגמנטים, עוצרים בסוף
+          video.pause();
         }
-        if (time < seg.start && (nextStart === null || seg.start < nextStart)) {
-          nextStart = seg.start;
+      } else if (currentSeg.end !== null && time >= currentSeg.end - 0.06) {
+        // פתרון ה-Pro: אם אנחנו 60 מילי-שנייה לפני סוף הסגמנט,
+        // מקפיצים כבר לסגמנט הבא כדי שהמעבר ירגיש חלק ללא גמגום
+        const currentIndex = segments.indexOf(currentSeg);
+        const nextSeg = segments[currentIndex + 1];
+        if (nextSeg) {
+          video.currentTime = nextSeg.start;
+        } else {
+          // סיימנו את כל הסגמנטים
+          video.pause();
         }
-      }
-      if (!inSegment && nextStart !== null) {
-        videoRef.current.currentTime = nextStart;
-        videoRef.current.play(); // מבטיח זרימה רציפה
       }
     }
   };
