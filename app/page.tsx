@@ -92,12 +92,12 @@ export default function ReelsCutterPage() {
         programmaticSeekRef.current = true;
         v.muted = true;
         if (isMobileRef.current) {
-          // Mobile: pause cleanly → seek → play from exact position
-          programmaticPauseRef.current = true;
-          v.pause();
+          // Mobile: hide video during seek — clean black cut, no play() issues
+          v.style.opacity = '0';
           v.currentTime = target;
-          const fallback = setTimeout(() => { if (videoRef.current) { videoRef.current.muted = false; videoRef.current.play(); } }, 800);
-          v.addEventListener('seeked', () => { clearTimeout(fallback); if (videoRef.current) { videoRef.current.muted = false; videoRef.current.play(); } }, { once: true });
+          const restore = () => { if (videoRef.current) { videoRef.current.style.opacity = '1'; videoRef.current.muted = false; startLoop(); } };
+          const fallback = setTimeout(restore, 800);
+          v.addEventListener('seeked', () => { clearTimeout(fallback); restore(); }, { once: true });
         } else {
           // Desktop: seamless seek while playing
           v.currentTime = target;
