@@ -24,11 +24,10 @@ export default function ReelsCutterPage() {
   const timelineRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<{ index: number; edge: 'start' | 'end' } | null>(null);
-  const segmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
   const segmentsRef = useRef<{ start: number; end: number | null }[] | null>(null);
   const durationRef = useRef<number>(0);
   const programmaticSeekRef = useRef(false);
-  const scheduleJumpRef = useRef<(time: number) => void>(() => {});
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDraggingRef = useRef(false);
 
@@ -41,7 +40,7 @@ export default function ReelsCutterPage() {
 
   useEffect(() => { segmentsRef.current = segments; }, [segments]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
-  useEffect(() => () => { if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current); }, []);
+  useEffect(() => () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); }, []);
 
   useEffect(() => {
     const c = timelineContainerRef.current;
@@ -52,57 +51,53 @@ export default function ReelsCutterPage() {
       c.scrollLeft = Math.max(0, ph - cw * 0.25);
   }, [currentTime, zoom, duration]);
 
-  const clearSegmentTimer = () => {
-    if (segmentTimerRef.current !== null) {
-      clearTimeout(segmentTimerRef.current);
-      segmentTimerRef.current = null;
+  const stopLoop = () => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
     }
   };
 
-  const scheduleJumpFromTime = (time: number) => {
-    clearSegmentTimer();
-    const segs = segmentsRef.current;
-    const dur = durationRef.current;
-    const video = videoRef.current;
-    if (!segs || !video) return;
-
-    const inSeg = segs.find(s => time >= s.start && time <= (s.end ?? dur));
-    if (!inSeg) {
-      const next = segs.filter(s => s.start > time).sort((a, b) => a.start - b.start)[0];
-      if (next) {
-        programmaticSeekRef.current = true;
-        video.currentTime = next.start;
-        scheduleJumpRef.current(next.start);
-      } else {
-        video.pause();
-      }
-      return;
-    }
-    if (inSeg.end === null) return;
-    const msUntilEnd = (inSeg.end - time) * 1000;
-    const idx = segs.indexOf(inSeg);
-    const nextSeg = segs[idx + 1];
-    segmentTimerRef.current = setTimeout(() => {
+  const startLoop = () => {
+    stopLoop();
+    const tick = () => {
       const v = videoRef.current;
-      if (!v || v.paused) return;
-      programmaticSeekRef.current = true;
-      if (nextSeg) {
-        v.muted = true;
-        v.currentTime = nextSeg.start;
-        scheduleJumpRef.current(nextSeg.start);
-        setTimeout(() => { if (videoRef.current) videoRef.current.muted = false; }, 120);
-      } else {
-        v.pause();
+      const segs = segmentsRef.current;
+      const dur = durationRef.current;
+      if (!v || !segs || v.paused) { rafRef.current = null; return; }
+      const t = v.currentTime;
+      const inSeg = segs.find(s => t >= s.start && t <= (s.end ?? dur));
+      if (!inSeg) {
+        const next = segs.filter(s => s.start > t).sort((a, b) => a.start - b.start)[0];
+        if (next) {
+          programmaticSeekRef.current = true;
+          v.muted = true;
+          v.currentTime = next.start;
+          v.addEventListener('seeked', () => { if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, { once: true });
+        } else { v.pause(); }
+        rafRef.current = null; return;
       }
-    }, Math.max(0, msUntilEnd - 100));
+      if (inSeg.end !== null && t >= inSeg.end - 0.05) {
+        const idx = segs.indexOf(inSeg);
+        const nextSeg = segs[idx + 1];
+        if (nextSeg) {
+          programmaticSeekRef.current = true;
+          v.muted = true;
+          v.currentTime = nextSeg.start;
+          v.addEventListener('seeked', () => { if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, { once: true });
+        } else { v.pause(); }
+        rafRef.current = null; return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
   };
-  scheduleJumpRef.current = scheduleJumpFromTime;
 
   useEffect(() => {
     const handlePointerUp = () => {
       if (draggingRef.current) {
         draggingRef.current = null;
-        if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime);
+        if (videoRef.current && !videoRef.current.paused) startLoop();
       }
     };
     window.addEventListener('pointerup', handlePointerUp);
@@ -249,7 +244,21 @@ export default function ReelsCutterPage() {
             {videoUrl ? (
               <div className="w-full flex flex-col items-center">
                 <div className="relative aspect-[9/16] w-[240px] bg-black rounded-[30px] overflow-hidden border border-white/10 mb-6 shadow-inner">
-                  <video ref={videoRef} src={videoUrl} onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)} onTimeUpdate={handleTimeUpdate} onPlay={(e) => scheduleJumpFromTime(e.currentTarget.currentTime)} onSeeked={(e) => { if (programmaticSeekRef.current) { programmaticSeekRef.current = false; return; } if (!e.currentTarget.paused && !draggingRef.current && !seekDraggingRef.current) scheduleJumpFromTime(e.currentTarget.currentTime); }} onPause={clearSegmentTimer} className="w-full h-full object-cover" playsInline onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()} />
+                  <video
+                    ref={videoRef}
+                    src={videoUrl}
+                    onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+                    onTimeUpdate={handleTimeUpdate}
+                    onPlay={() => startLoop()}
+                    onSeeked={(e) => {
+                      if (programmaticSeekRef.current) { programmaticSeekRef.current = false; return; }
+                      if (!e.currentTarget.paused && !draggingRef.current && !seekDraggingRef.current) startLoop();
+                    }}
+                    onPause={stopLoop}
+                    className="w-full h-full object-cover"
+                    playsInline
+                    onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
+                  />
                   {processing && (
                     <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center gap-3">
                       <span className="text-[#D4AF37] text-[10px] uppercase tracking-widest animate-pulse font-bold">{status}</span>
@@ -264,9 +273,9 @@ export default function ReelsCutterPage() {
                     </div>
                   )}
                 </div>
-                
+
                 {segments && (
-                  <div className="w-full mb-6 space-y-3">
+                  <div className="w-full mb-6 space-y-2">
 
                     {/* ── Zoom controls ── */}
                     <div className="flex items-center justify-between px-0.5">
@@ -284,29 +293,33 @@ export default function ReelsCutterPage() {
                       </div>
                     </div>
 
-                    {/* ── Scrollable timeline container ── */}
+                    {/* ── Scrollable timeline container (delete buttons + bars together) ── */}
                     <div ref={timelineContainerRef} className="w-full overflow-x-auto rounded-xl" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-                      <div
-                        ref={timelineRef}
-                        className="relative h-36 md:h-16 bg-white/[0.03] border border-white/10 rounded-xl"
-                        style={{ width: `${zoom * 100}%`, minWidth: '100%', touchAction: zoom > 1 ? 'pan-x' : 'none' }}
-                      >
-                        {/* Delete buttons row inside scrollable content */}
+
+                      {/* Delete buttons row — above the timeline bar, scrolls with it */}
+                      <div className="relative h-8" style={{ width: `${zoom * 100}%`, minWidth: '100%' }}>
                         {segments.map((seg, i) => (
                           <button
                             key={`del-${i}`}
-                            className="absolute top-1 -translate-x-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-red-500/20 hover:bg-red-500/60 text-red-400 hover:text-white text-[11px] font-black transition-all leading-none border border-red-500/30 z-20"
+                            className="absolute top-1 -translate-x-1/2 flex items-center justify-center w-6 h-6 rounded-full bg-red-500/20 hover:bg-red-500/60 text-red-400 hover:text-white text-[12px] font-black transition-all leading-none border border-red-500/30 z-20"
                             style={{ left: `${(((seg.start + (seg.end ?? duration)) / 2) / duration) * 100}%` }}
                             onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => { e.stopPropagation(); setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev); }}
                           >×</button>
                         ))}
+                      </div>
 
+                      {/* Timeline bar */}
+                      <div
+                        ref={timelineRef}
+                        className="relative h-20 md:h-14 bg-white/[0.03] border border-white/10 rounded-xl"
+                        style={{ width: `${zoom * 100}%`, minWidth: '100%', touchAction: zoom > 1 ? 'pan-x' : 'none' }}
+                      >
                         {/* Segment bars */}
                         {segments.map((seg, i) => (
                           <div
                             key={i}
-                            className="absolute top-7 bottom-1 cursor-ew-resize"
+                            className="absolute top-2 bottom-2 cursor-ew-resize"
                             style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%`, touchAction: 'none' }}
                             onPointerDown={(e) => {
                               e.stopPropagation();
@@ -330,15 +343,15 @@ export default function ReelsCutterPage() {
                             onPointerUp={(e) => {
                               e.currentTarget.releasePointerCapture(e.pointerId);
                               draggingRef.current = null;
-                              if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime);
+                              if (videoRef.current && !videoRef.current.paused) startLoop();
                             }}
                           >
                             {/* Left solid handle */}
-                            <div className="absolute left-0 top-0 h-full w-3 bg-[#D4AF37] rounded-l-sm pointer-events-none" />
+                            <div className="absolute left-0 top-0 h-full w-4 bg-[#D4AF37] rounded-l-md pointer-events-none" />
                             {/* Center body */}
-                            <div className="absolute left-3 right-3 top-0 bottom-0 bg-[#D4AF37]/30 pointer-events-none" />
+                            <div className="absolute left-4 right-4 top-0 bottom-0 bg-[#D4AF37]/30 pointer-events-none" />
                             {/* Right solid handle */}
-                            <div className="absolute right-0 top-0 h-full w-3 bg-[#D4AF37] rounded-r-sm pointer-events-none" />
+                            <div className="absolute right-0 top-0 h-full w-4 bg-[#D4AF37] rounded-r-md pointer-events-none" />
                           </div>
                         ))}
 
@@ -362,7 +375,7 @@ export default function ReelsCutterPage() {
                         style={{ left: `${(currentTime / duration) * 100}%` }}
                         onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); seekDraggingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); }}
                         onPointerMove={(e) => { if (!seekDraggingRef.current || !seekBarRef.current || !videoRef.current) return; const rect = seekBarRef.current.getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
-                        onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); if (videoRef.current && !videoRef.current.paused) scheduleJumpFromTime(videoRef.current.currentTime); }}
+                        onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); if (videoRef.current && !videoRef.current.paused) startLoop(); }}
                       />
                     </div>
 
