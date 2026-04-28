@@ -42,6 +42,7 @@ export default function ReelsCutterPage() {
   const programmaticSeekRef = useRef(false);
   const programmaticPauseRef = useRef(false);
   const warmingUpRef = useRef(false);
+  const isMobileRef = useRef(false);
   const prefetchVideoRef = useRef<HTMLVideoElement>(null);
   const prefetchWarmedRef = useRef(false);
   const lastSegIdxRef = useRef(-1);
@@ -55,6 +56,7 @@ export default function ReelsCutterPage() {
     }
   }, []);
 
+  useEffect(() => { isMobileRef.current = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent); }, []);
   useEffect(() => { segmentsRef.current = segments; }, [segments]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); }, []);
@@ -89,9 +91,19 @@ export default function ReelsCutterPage() {
       const jumpTo = (target: number) => {
         programmaticSeekRef.current = true;
         v.muted = true;
-        v.currentTime = target;
-        const fallback = setTimeout(() => { if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, 800);
-        v.addEventListener('seeked', () => { clearTimeout(fallback); if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, { once: true });
+        if (isMobileRef.current) {
+          // Mobile: pause cleanly → seek → play from exact position
+          programmaticPauseRef.current = true;
+          v.pause();
+          v.currentTime = target;
+          const fallback = setTimeout(() => { if (videoRef.current) { videoRef.current.muted = false; videoRef.current.play(); } }, 800);
+          v.addEventListener('seeked', () => { clearTimeout(fallback); if (videoRef.current) { videoRef.current.muted = false; videoRef.current.play(); } }, { once: true });
+        } else {
+          // Desktop: seamless seek while playing
+          v.currentTime = target;
+          const fallback = setTimeout(() => { if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, 800);
+          v.addEventListener('seeked', () => { clearTimeout(fallback); if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, { once: true });
+        }
       };
 
       if (!inSeg) {
