@@ -97,13 +97,11 @@ export default function ReelsCutterPage() {
       const { index, edge } = draggingRef.current;
       setSegments(prev => {
         if (!prev) return prev;
-        const newSegs = [...prev];
-        if (edge === 'start') {
-           newSegs[index].start = Math.min(newTime, (newSegs[index].end ?? duration) - 0.1);
-        } else {
-           newSegs[index].end = Math.max(newTime, newSegs[index].start + 0.1);
-        }
-        return newSegs;
+        return prev.map((seg, i) => {
+          if (i !== index) return seg;
+          if (edge === 'start') return { ...seg, start: Math.min(newTime, (seg.end ?? duration) - 0.1) };
+          return { ...seg, end: Math.max(newTime, seg.start + 0.1) };
+        });
       });
       if (videoRef.current) videoRef.current.currentTime = newTime;
     };
@@ -264,9 +262,10 @@ export default function ReelsCutterPage() {
                   <div className="w-full mb-6">
                     <div ref={timelineRef} className="relative h-10 bg-white/[0.03] rounded-xl border border-white/10 overflow-hidden mb-4 cursor-pointer" onClick={(e) => { if (!draggingRef.current && videoRef.current) videoRef.current.currentTime = ((e.clientX - e.currentTarget.getBoundingClientRect().left) / e.currentTarget.getBoundingClientRect().width) * duration; }}>
                       {segments.map((seg, i) => (
-                        <div key={i} className="absolute h-full bg-[#D4AF37]/50 border-x border-[#D4AF37]" style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%` }}>
-                          <div className="absolute left-0 w-2 h-full cursor-ew-resize" onMouseDown={(e) => { e.stopPropagation(); draggingRef.current = { index: i, edge: 'start' }; }} />
-                          <div className="absolute right-0 w-2 h-full cursor-ew-resize" onMouseDown={(e) => { e.stopPropagation(); draggingRef.current = { index: i, edge: 'end' }; }} />
+                        <div key={i} className="absolute h-full bg-[#D4AF37]/50 border-x border-[#D4AF37] group/seg" style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%` }}>
+                          <div className="absolute left-0 w-3 h-full cursor-ew-resize z-10" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); draggingRef.current = { index: i, edge: 'start' }; }} />
+                          <div className="absolute right-0 w-3 h-full cursor-ew-resize z-10" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); draggingRef.current = { index: i, edge: 'end' }; }} />
+                          <button className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/seg:opacity-100 transition-opacity z-20" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }} onClick={(e) => { e.stopPropagation(); setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev); }}><span className="text-black/80 text-[11px] font-black leading-none">×</span></button>
                         </div>
                       ))}
                       <div className="absolute top-0 bottom-0 w-[2px] bg-red-500" style={{ left: `${(currentTime / duration) * 100}%`, pointerEvents: 'none' }} />
