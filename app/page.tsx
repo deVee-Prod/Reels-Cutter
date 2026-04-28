@@ -159,7 +159,10 @@ export default function ReelsCutterPage() {
     const video = videoRef.current;
     if (!video || segs.length === 0) return;
     if (video.readyState < 2) {
-      await new Promise<void>(resolve => video.addEventListener('loadeddata', () => resolve(), { once: true }));
+      await new Promise<void>(resolve => {
+        const t = setTimeout(resolve, 3000);
+        video.addEventListener('loadeddata', () => { clearTimeout(t); resolve(); }, { once: true });
+      });
     }
     for (const seg of segs) {
       await new Promise<void>(resolve => {
@@ -191,7 +194,7 @@ export default function ReelsCutterPage() {
       const whisperPromise = fetch('/api/whisper', { method: 'POST', body: form });
 
       setStatus("Creating preview...");
-      await ffmpeg.exec(['-i', 'input.mov', '-vf', 'scale=-2:360', '-c:v', 'libx264', '-preset', 'ultrafast', '-profile:v', 'baseline', '-level', '3.1', '-crf', '28', '-g', '15', '-keyint_min', '15', '-c:a', 'copy', 'preview.mp4']);
+      await ffmpeg.exec(['-i', 'input.mov', '-vf', 'scale=-2:360', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-g', '15', '-keyint_min', '15', '-c:a', 'copy', 'preview.mp4']);
       const previewData = await ffmpeg.readFile('preview.mp4');
       setVideoUrl(URL.createObjectURL(new Blob([(previewData as any).buffer], { type: 'video/mp4' })));
 
