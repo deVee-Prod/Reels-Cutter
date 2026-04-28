@@ -63,7 +63,7 @@ function buildSpeechSegments(
   if (words.length === 0) return [{ start: 0, end: null }];
 
   // תיקון: end של מילה לא יכול להיות יותר מ-1 שניה אחרי ה-start שלה
-  const MAX_WORD_DURATION = 1.0;
+  const MAX_WORD_DURATION = 0.3;
   const fixed = words.map((w, i) => {
     const nextStart = i < words.length - 1 ? words[i + 1].start : null;
     const maxEnd = nextStart !== null
