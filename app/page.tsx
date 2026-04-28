@@ -158,19 +158,32 @@ export default function ReelsCutterPage() {
   const warmupSegments = async (segs: { start: number; end: number | null }[]) => {
     const video = videoRef.current;
     if (!video || segs.length === 0) return;
+
+    const globalDeadline = Date.now() + 20000;
+
+    const seekTo = (t: number) => new Promise<void>(resolve => {
+      if (Date.now() >= globalDeadline) { resolve(); return; }
+      const fallback = setTimeout(resolve, 500);
+      video.addEventListener('seeked', () => { clearTimeout(fallback); resolve(); }, { once: true });
+      video.currentTime = t;
+    });
+
     if (video.readyState < 2) {
       await new Promise<void>(resolve => {
         const t = setTimeout(resolve, 3000);
         video.addEventListener('loadeddata', () => { clearTimeout(t); resolve(); }, { once: true });
       });
     }
+
     for (const seg of segs) {
-      await new Promise<void>(resolve => {
-        const fallback = setTimeout(resolve, 600);
-        video.addEventListener('seeked', () => { clearTimeout(fallback); resolve(); }, { once: true });
-        video.currentTime = seg.start;
-      });
+      if (Date.now() >= globalDeadline) break;
+      const end = seg.end ?? durationRef.current;
+      const len = end - seg.start;
+      await seekTo(seg.start);
+      if (len > 0.2) await seekTo(seg.start + 0.1);
+      if (len > 0.4) await seekTo(seg.start + 0.3);
     }
+
     video.currentTime = segs[0].start;
   };
 
