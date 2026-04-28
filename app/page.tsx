@@ -155,6 +155,22 @@ export default function ReelsCutterPage() {
     }
   };
 
+  const warmupSegments = async (segs: { start: number; end: number | null }[]) => {
+    const video = videoRef.current;
+    if (!video || segs.length === 0) return;
+    if (video.readyState < 2) {
+      await new Promise<void>(resolve => video.addEventListener('loadeddata', () => resolve(), { once: true }));
+    }
+    for (const seg of segs) {
+      await new Promise<void>(resolve => {
+        const fallback = setTimeout(resolve, 600);
+        video.addEventListener('seeked', () => { clearTimeout(fallback); resolve(); }, { once: true });
+        video.currentTime = seg.start;
+      });
+    }
+    video.currentTime = segs[0].start;
+  };
+
   const analyzeVideo = async () => {
     if (!videoFile || !loaded) return;
     setProcessing(true);
@@ -185,6 +201,9 @@ export default function ReelsCutterPage() {
 
       if (data.segments) {
         setSegments(data.segments);
+        setStatus("Preparing edit...");
+        setProgress(0);
+        await warmupSegments(data.segments);
         setStatus("Review Edit");
       }
     } catch (e) {
