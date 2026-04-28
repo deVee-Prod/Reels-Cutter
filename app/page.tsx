@@ -78,32 +78,27 @@ export default function ReelsCutterPage() {
       const v = videoRef.current;
       const segs = segmentsRef.current;
       const dur = durationRef.current;
-      if (!v || !segs || v.paused) { rafRef.current = null; return; }
+      if (!v || !segs || v.paused || draggingRef.current || seekDraggingRef.current) { rafRef.current = null; return; }
       const t = v.currentTime;
       const inSeg = segs.find(s => t >= s.start && t <= (s.end ?? dur));
+
+      const jumpTo = (target: number) => {
+        programmaticSeekRef.current = true;
+        v.muted = true;
+        v.currentTime = target;
+        const fallback = setTimeout(() => { if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, 800);
+        v.addEventListener('seeked', () => { clearTimeout(fallback); if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, { once: true });
+      };
+
       if (!inSeg) {
         const next = segs.filter(s => s.start > t).sort((a, b) => a.start - b.start)[0];
-        if (next) {
-          programmaticSeekRef.current = true;
-          programmaticPauseRef.current = true;
-          v.pause();
-          v.muted = true;
-          v.currentTime = next.start;
-          v.addEventListener('seeked', () => { if (videoRef.current) { videoRef.current.muted = false; videoRef.current.play(); } }, { once: true });
-        } else { v.pause(); }
+        if (next) jumpTo(next.start); else v.pause();
         rafRef.current = null; return;
       }
       if (inSeg.end !== null && t >= inSeg.end - 0.2) {
         const idx = segs.indexOf(inSeg);
         const nextSeg = segs[idx + 1];
-        if (nextSeg) {
-          programmaticSeekRef.current = true;
-          programmaticPauseRef.current = true;
-          v.pause();
-          v.muted = true;
-          v.currentTime = nextSeg.start;
-          v.addEventListener('seeked', () => { if (videoRef.current) { videoRef.current.muted = false; videoRef.current.play(); } }, { once: true });
-        } else { v.pause(); }
+        if (nextSeg) jumpTo(nextSeg.start); else v.pause();
         rafRef.current = null; return;
       }
       rafRef.current = requestAnimationFrame(tick);
@@ -263,7 +258,7 @@ export default function ReelsCutterPage() {
                       if (programmaticSeekRef.current) { programmaticSeekRef.current = false; return; }
                       if (!e.currentTarget.paused && !draggingRef.current && !seekDraggingRef.current) startLoop();
                     }}
-                    onPause={() => { stopLoop(); if (!programmaticPauseRef.current) setPaused(true); programmaticPauseRef.current = false; }}
+                    onPause={() => { stopLoop(); setPaused(true); }}
                     className="w-full h-full object-cover"
                     playsInline
                     onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
@@ -347,14 +342,13 @@ export default function ReelsCutterPage() {
                                 if (edge === 'start') return { ...s, start: Math.min(t, (s.end ?? duration) - 0.1) };
                                 return { ...s, end: Math.max(t, s.start + 0.1) };
                               }) : prev);
-                              if (videoRef.current) {
-                                const newStart = edge === 'start' ? Math.min(t, (seg.end ?? duration) - 0.1) : seg.start;
-                                videoRef.current.currentTime = newStart;
-                              }
                             }}
                             onPointerUp={(e) => {
                               e.currentTarget.releasePointerCapture(e.pointerId);
+                              const dragIdx = draggingRef.current?.index ?? i;
                               draggingRef.current = null;
+                              const seg = segmentsRef.current?.[dragIdx];
+                              if (videoRef.current && seg) videoRef.current.currentTime = seg.start;
                               if (videoRef.current && !videoRef.current.paused) startLoop();
                             }}
                           >
