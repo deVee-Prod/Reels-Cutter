@@ -79,12 +79,12 @@ function buildSpeechSegments(
   for (let i = 1; i < fixed.length; i++) {
     const gap = fixed[i].start - segEnd;
     if (gap >= threshold) {
-      segments.push({ start: segStart, end: segEnd });
+      segments.push({ start: Math.max(0, segStart - 0.1), end: segEnd });
       segStart = fixed[i].start;
     }
     segEnd = fixed[i].end;
   }
-  segments.push({ start: segStart, end: null });
+  segments.push({ start: Math.max(0, segStart - 0.1), end: null });
 
   return segments;
 }
