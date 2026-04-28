@@ -85,33 +85,14 @@ export default function ReelsCutterPage() {
 
   useEffect(() => {
     const handleMouseUp = () => {
-      draggingRef.current = null;
-      if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime);
-    };
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!draggingRef.current || !duration || !timelineRef.current) return;
-      const rect = timelineRef.current.getBoundingClientRect();
-      let x = e.clientX - rect.left;
-      x = Math.max(0, Math.min(x, rect.width));
-      const newTime = (x / rect.width) * duration;
-      const { index, edge } = draggingRef.current;
-      setSegments(prev => {
-        if (!prev) return prev;
-        return prev.map((seg, i) => {
-          if (i !== index) return seg;
-          if (edge === 'start') return { ...seg, start: Math.min(newTime, (seg.end ?? duration) - 0.1) };
-          return { ...seg, end: Math.max(newTime, seg.start + 0.1) };
-        });
-      });
-      if (videoRef.current) videoRef.current.currentTime = newTime;
+      if (draggingRef.current) {
+        draggingRef.current = null;
+        if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime);
+      }
     };
     window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => {
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, [duration]);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, []);
 
   const handleTimeUpdate = () => {
     if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
@@ -260,12 +241,24 @@ export default function ReelsCutterPage() {
                 
                 {segments && (
                   <div className="w-full mb-6">
+                    <div className="relative w-full h-5 mb-1">
+                      {segments.map((seg, i) => (
+                        <button key={i} className="absolute -translate-x-1/2 flex items-center justify-center w-4 h-4 rounded-full bg-white/10 hover:bg-red-500/60 text-white/40 hover:text-white text-[10px] font-black transition-colors leading-none" style={{ left: `${(((seg.start + (seg.end ?? duration)) / 2) / duration) * 100}%` }} onClick={() => setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev)}>×</button>
+                      ))}
+                    </div>
                     <div ref={timelineRef} className="relative h-10 bg-white/[0.03] rounded-xl border border-white/10 overflow-hidden mb-4 cursor-pointer" onClick={(e) => { if (!draggingRef.current && videoRef.current) videoRef.current.currentTime = ((e.clientX - e.currentTarget.getBoundingClientRect().left) / e.currentTarget.getBoundingClientRect().width) * duration; }}>
                       {segments.map((seg, i) => (
-                        <div key={i} className="absolute h-full bg-[#D4AF37]/50 border-x border-[#D4AF37] group/seg" style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%` }}>
-                          <div className="absolute left-0 w-3 h-full cursor-ew-resize z-10" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); draggingRef.current = { index: i, edge: 'start' }; }} />
-                          <div className="absolute right-0 w-3 h-full cursor-ew-resize z-10" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); draggingRef.current = { index: i, edge: 'end' }; }} />
-                          <button className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/seg:opacity-100 transition-opacity z-20" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }} onClick={(e) => { e.stopPropagation(); setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev); }}><span className="text-black/80 text-[11px] font-black leading-none">×</span></button>
+                        <div key={i} className="absolute h-full bg-[#D4AF37]/50 border-x border-[#D4AF37]" style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%` }}>
+                          <div className="absolute left-0 w-3 h-full cursor-ew-resize z-10"
+                            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); (e.target as Element).setPointerCapture(e.pointerId); draggingRef.current = { index: i, edge: 'start' }; }}
+                            onPointerMove={(e) => { if (!draggingRef.current || !timelineRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const t = (x / rect.width) * duration; setSegments(prev => prev ? prev.map((s, idx) => idx !== i ? s : { ...s, start: Math.min(t, (s.end ?? duration) - 0.1) }) : prev); if (videoRef.current) videoRef.current.currentTime = t; }}
+                            onPointerUp={(e) => { (e.target as Element).releasePointerCapture(e.pointerId); draggingRef.current = null; if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime); }}
+                          />
+                          <div className="absolute right-0 w-3 h-full cursor-ew-resize z-10"
+                            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); (e.target as Element).setPointerCapture(e.pointerId); draggingRef.current = { index: i, edge: 'end' }; }}
+                            onPointerMove={(e) => { if (!draggingRef.current || !timelineRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const t = (x / rect.width) * duration; setSegments(prev => prev ? prev.map((s, idx) => idx !== i ? s : { ...s, end: Math.max(t, s.start + 0.1) }) : prev); if (videoRef.current) videoRef.current.currentTime = t; }}
+                            onPointerUp={(e) => { (e.target as Element).releasePointerCapture(e.pointerId); draggingRef.current = null; if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime); }}
+                          />
                         </div>
                       ))}
                       <div className="absolute top-0 bottom-0 w-[2px] bg-red-500" style={{ left: `${(currentTime / duration) * 100}%`, pointerEvents: 'none' }} />
