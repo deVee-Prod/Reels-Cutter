@@ -42,6 +42,7 @@ export default function ReelsCutterPage() {
   useEffect(() => { segmentsRef.current = segments; }, [segments]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); }, []);
+  useEffect(() => { if (window.innerWidth < 768) setZoom(8); }, []);
 
   useEffect(() => {
     const c = timelineContainerRef.current;
@@ -72,20 +73,22 @@ export default function ReelsCutterPage() {
         const next = segs.filter(s => s.start > t).sort((a, b) => a.start - b.start)[0];
         if (next) {
           programmaticSeekRef.current = true;
+          v.pause();
           v.muted = true;
           v.currentTime = next.start;
-          v.addEventListener('seeked', () => { if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, { once: true });
+          v.addEventListener('seeked', () => { if (videoRef.current) { videoRef.current.muted = false; videoRef.current.play(); } }, { once: true });
         } else { v.pause(); }
         rafRef.current = null; return;
       }
-      if (inSeg.end !== null && t >= inSeg.end - 0.12) {
+      if (inSeg.end !== null && t >= inSeg.end - 0.2) {
         const idx = segs.indexOf(inSeg);
         const nextSeg = segs[idx + 1];
         if (nextSeg) {
           programmaticSeekRef.current = true;
+          v.pause();
           v.muted = true;
           v.currentTime = nextSeg.start;
-          v.addEventListener('seeked', () => { if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, { once: true });
+          v.addEventListener('seeked', () => { if (videoRef.current) { videoRef.current.muted = false; videoRef.current.play(); } }, { once: true });
         } else { v.pause(); }
         rafRef.current = null; return;
       }
@@ -231,7 +234,7 @@ export default function ReelsCutterPage() {
   }
 
   return (
-    <main className="min-h-[100dvh] bg-[#050505] text-white flex flex-col items-center justify-between p-6 font-sans overflow-hidden">
+    <main className="min-h-[100dvh] bg-[#050505] text-white flex flex-col items-center justify-between px-2 py-6 md:p-6 font-sans overflow-hidden">
       <div className="w-full mt-4 md:mt-8 flex flex-col items-center z-10 text-center space-y-2">
         <Image src="/logo.png" alt="Logo" width={110} height={35} className="mb-2 opacity-90" />
         <h1 className="text-[12px] tracking-[0.7em] font-bold uppercase italic text-white">Reels Cutter</h1>
@@ -239,7 +242,7 @@ export default function ReelsCutterPage() {
       </div>
 
       <div className="w-full max-w-[550px] flex flex-col items-center gap-4 my-auto py-8">
-        <div className="w-full bg-[#0c0c0c] border border-white/[0.05] rounded-[40px] p-10 relative group shadow-2xl">
+        <div className="w-full bg-[#0c0c0c] border border-white/[0.05] rounded-[40px] p-4 md:p-10 relative group shadow-2xl">
           <div className="absolute -inset-2 bg-[#D4AF37] rounded-[50px] blur-[80px] opacity-[0.02]"></div>
           <div className="relative flex flex-col items-center">
             {videoUrl ? (
@@ -302,7 +305,7 @@ export default function ReelsCutterPage() {
                         {segments.map((seg, i) => (
                           <button
                             key={`del-${i}`}
-                            className="absolute top-1 -translate-x-1/2 flex items-center justify-center w-6 h-6 rounded-full bg-red-500/20 hover:bg-red-500/60 text-red-400 hover:text-white text-[12px] font-black transition-all leading-none border border-red-500/30 z-20"
+                            className="absolute top-1 -translate-x-1/2 flex items-center justify-center w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 text-white text-[12px] font-black transition-all leading-none border border-red-600 z-20"
                             style={{ left: `${(((seg.start + (seg.end ?? duration)) / 2) / duration) * 100}%` }}
                             onPointerDown={(e) => e.stopPropagation()}
                             onClick={(e) => { e.stopPropagation(); setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev); }}
@@ -357,7 +360,7 @@ export default function ReelsCutterPage() {
                         ))}
 
                         {/* Playhead */}
-                        <div className="absolute top-0 bottom-0 w-px bg-white/30 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }} />
+                        <div className="absolute top-0 bottom-0 w-[2px] bg-white/70 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }} />
                       </div>
                     </div>
 
