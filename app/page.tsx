@@ -27,6 +27,7 @@ export default function ReelsCutterPage() {
   const durationRef = useRef<number>(0);
   const programmaticSeekRef = useRef(false);
   const scheduleJumpRef = useRef<(time: number) => void>(() => {});
+  const seekBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (document.cookie.includes('session_access=granted')) {
@@ -240,33 +241,76 @@ export default function ReelsCutterPage() {
                 </div>
                 
                 {segments && (
-                  <div className="w-full mb-6">
-                    <div className="relative w-full h-5 mb-1">
+                  <div className="w-full mb-6 space-y-2">
+
+                    {/* ── Delete buttons – centered above each segment ── */}
+                    <div className="relative w-full h-4">
                       {segments.map((seg, i) => (
-                        <button key={i} className="absolute -translate-x-1/2 flex items-center justify-center w-4 h-4 rounded-full bg-white/10 hover:bg-red-500/60 text-white/40 hover:text-white text-[10px] font-black transition-colors leading-none" style={{ left: `${(((seg.start + (seg.end ?? duration)) / 2) / duration) * 100}%` }} onClick={() => setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev)}>×</button>
+                        <button
+                          key={i}
+                          className="absolute -translate-x-1/2 flex items-center justify-center w-4 h-4 rounded-full bg-white/[0.06] hover:bg-red-500/60 text-white/30 hover:text-white text-[10px] font-black transition-all leading-none border border-white/10 hover:border-red-500/40"
+                          style={{ left: `${(((seg.start + (seg.end ?? duration)) / 2) / duration) * 100}%` }}
+                          onClick={() => setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev)}
+                        >×</button>
                       ))}
                     </div>
-                    <div ref={timelineRef} className="relative h-10 bg-white/[0.03] rounded-xl border border-white/10 overflow-hidden mb-4 cursor-pointer" onClick={(e) => { if (!draggingRef.current && videoRef.current) videoRef.current.currentTime = ((e.clientX - e.currentTarget.getBoundingClientRect().left) / e.currentTarget.getBoundingClientRect().width) * duration; }}>
+
+                    {/* ── Segments timeline – drag handles only ── */}
+                    <div ref={timelineRef} className="relative h-11 bg-white/[0.03] rounded-2xl border border-white/[0.06] overflow-hidden">
                       {segments.map((seg, i) => (
-                        <div key={i} className="absolute h-full bg-[#D4AF37]/50 border-x border-[#D4AF37]" style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%` }}>
-                          <div className="absolute left-0 w-3 h-full cursor-ew-resize z-10"
+                        <div
+                          key={i}
+                          className="absolute top-1.5 bottom-1.5 bg-[#D4AF37]/25 rounded-lg border border-[#D4AF37]/50"
+                          style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%` }}
+                        >
+                          {/* Left handle */}
+                          <div
+                            className="absolute left-0 top-0 w-5 h-full cursor-ew-resize z-10 flex items-center justify-center"
                             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); (e.target as Element).setPointerCapture(e.pointerId); draggingRef.current = { index: i, edge: 'start' }; }}
                             onPointerMove={(e) => { if (!draggingRef.current || !timelineRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const t = (x / rect.width) * duration; setSegments(prev => prev ? prev.map((s, idx) => idx !== i ? s : { ...s, start: Math.min(t, (s.end ?? duration) - 0.1) }) : prev); if (videoRef.current) videoRef.current.currentTime = t; }}
                             onPointerUp={(e) => { (e.target as Element).releasePointerCapture(e.pointerId); draggingRef.current = null; if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime); }}
-                          />
-                          <div className="absolute right-0 w-3 h-full cursor-ew-resize z-10"
+                          >
+                            <div className="w-px h-4 rounded-full bg-[#D4AF37]/80 pointer-events-none" />
+                          </div>
+                          {/* Right handle */}
+                          <div
+                            className="absolute right-0 top-0 w-5 h-full cursor-ew-resize z-10 flex items-center justify-center"
                             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); (e.target as Element).setPointerCapture(e.pointerId); draggingRef.current = { index: i, edge: 'end' }; }}
                             onPointerMove={(e) => { if (!draggingRef.current || !timelineRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width)); const t = (x / rect.width) * duration; setSegments(prev => prev ? prev.map((s, idx) => idx !== i ? s : { ...s, end: Math.max(t, s.start + 0.1) }) : prev); if (videoRef.current) videoRef.current.currentTime = t; }}
                             onPointerUp={(e) => { (e.target as Element).releasePointerCapture(e.pointerId); draggingRef.current = null; if (videoRef.current && !videoRef.current.paused) scheduleJumpRef.current(videoRef.current.currentTime); }}
-                          />
+                          >
+                            <div className="w-px h-4 rounded-full bg-[#D4AF37]/80 pointer-events-none" />
+                          </div>
                         </div>
                       ))}
-                      <div className="absolute top-0 bottom-0 w-[2px] bg-red-500" style={{ left: `${(currentTime / duration) * 100}%`, pointerEvents: 'none' }} />
+                      {/* Playhead */}
+                      <div className="absolute top-0 bottom-0 w-px bg-white/20" style={{ left: `${(currentTime / duration) * 100}%`, pointerEvents: 'none' }} />
                     </div>
-                    <div className="flex justify-center gap-4 mb-4">
-                       <button onClick={() => videoRef.current?.play()} className="px-4 py-2 bg-white/5 rounded-lg text-[9px] uppercase tracking-widest">Play</button>
-                       <button onClick={() => videoRef.current?.pause()} className="px-4 py-2 bg-white/5 rounded-lg text-[9px] uppercase tracking-widest">Pause</button>
+
+                    {/* ── Seek bar – video navigation only ── */}
+                    <div className="w-full pt-1 pb-2">
+                      <div
+                        ref={seekBarRef}
+                        className="relative w-full h-[3px] bg-white/[0.08] rounded-full cursor-pointer"
+                        onClick={(e) => { if (!seekBarRef.current || !videoRef.current) return; const rect = seekBarRef.current.getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                      >
+                        <div className="absolute left-0 top-0 h-full bg-[#D4AF37]/50 rounded-full pointer-events-none" style={{ width: `${(currentTime / duration) * 100}%` }} />
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[11px] h-[11px] rounded-full bg-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.45)] cursor-grab active:cursor-grabbing pointer-events-auto"
+                          style={{ left: `${(currentTime / duration) * 100}%` }}
+                          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); (e.target as Element).setPointerCapture(e.pointerId); }}
+                          onPointerMove={(e) => { if (!seekBarRef.current || !videoRef.current) return; const rect = seekBarRef.current.getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                          onPointerUp={(e) => { (e.target as Element).releasePointerCapture(e.pointerId); }}
+                        />
+                      </div>
                     </div>
+
+                    {/* ── Play / Pause ── */}
+                    <div className="flex justify-center gap-3">
+                      <button onClick={() => videoRef.current?.play()} className="px-4 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors">Play</button>
+                      <button onClick={() => videoRef.current?.pause()} className="px-4 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors">Pause</button>
+                    </div>
+
                   </div>
                 )}
               </div>
