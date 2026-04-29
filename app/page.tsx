@@ -5,12 +5,12 @@ import Image from 'next/image';
 
 function LabelFooter() {
   return (
-    <div className="w-full mb-4 md:mb-8 flex flex-col items-center gap-4">
-      <p className="text-[10px] tracking-[0.15em] font-light text-white/65">
-        Powered By deVee Boutique Label
-      </p>
-      <Image src="/label_logo.jpg" alt="deVee Label" width={48} height={48} className="rounded-full opacity-100 shadow-xl" />
-    </div>
+    <footer className="w-full py-12 flex flex-col items-center space-y-4 mt-auto">
+      <p className="text-[10px] tracking-[0.2em] font-medium text-white/60">Powered By deVee Boutique Label</p>
+      <div className="w-12 h-12 rounded-full overflow-hidden">
+        <Image src="/label_logo.jpg" alt="deVee Label" width={48} height={48} className="object-cover" />
+      </div>
+    </footer>
   );
 }
 
@@ -276,12 +276,12 @@ export default function ReelsCutterPage() {
 
   if (!authorized) {
     return (
-      <main className="min-h-[100dvh] bg-[#050505] flex flex-col items-center justify-between p-8 text-center">
-        <div className="w-full mt-4 md:mt-8 flex flex-col items-center space-y-2">
-          <Image src="/logo.png" alt="Logo" width={88} height={28} className="mb-4 opacity-90 block mx-auto" />
-          <h1 className="text-[8px] tracking-[0.7em] font-bold uppercase text-white text-center">Reels Cutter</h1>
-        </div>
-        <div className="flex-1 flex flex-col justify-center w-full max-w-[340px]">
+      <div className="min-h-[100dvh] bg-[#050505] flex flex-col items-center text-center">
+        <header className="space-y-2 pt-8 pb-6">
+          <Image src="/logo.png" alt="Logo" width={100} height={32} className="mx-auto opacity-90" />
+          <p className="text-[9px] tracking-[0.3em] text-white/70 font-bold uppercase">REELS CUTTER</p>
+        </header>
+        <main className="flex-1 flex flex-col justify-center w-full max-w-[340px] px-4">
           <div className="mb-8 flex flex-col items-center gap-3 text-center">
             <div className="flex items-center gap-2">
               <div className="h-px w-8 bg-[#D4AF37]/30" />
@@ -294,21 +294,21 @@ export default function ReelsCutterPage() {
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-white/[0.02] border border-white/5 rounded-xl py-3 px-4 text-white text-center tracking-[0.4em] text-[9px] focus:outline-none" placeholder="ACCESS KEY" />
             <button type="submit" className="w-full py-3 bg-[#D4AF37] text-black rounded-xl uppercase tracking-[0.3em] text-[8px] font-black">Enter</button>
           </form>
-        </div>
+        </main>
         <LabelFooter />
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-[100dvh] bg-[#050505] text-white flex flex-col items-center justify-between px-2 py-6 md:p-6 font-sans overflow-hidden">
-      <div className="w-full mt-4 md:mt-8 flex flex-col items-center z-10 text-center space-y-2 relative">
+    <div className="min-h-[100dvh] bg-[#050505] text-white flex flex-col items-center overflow-y-auto overflow-x-hidden font-sans">
+      <header className="text-center space-y-2 pt-8 pb-6 relative">
         <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-56 h-20 bg-[#D4AF37] blur-[55px] opacity-[0.14] pointer-events-none" />
-        <Image src="/logo.png" alt="Logo" width={110} height={35} className="mb-2 opacity-90 relative" />
-        <h1 className="text-[8px] tracking-[0.7em] font-bold uppercase italic text-white">Reels Cutter</h1>
-      </div>
+        <Image src="/logo.png" alt="Logo" width={80} height={26} className="opacity-90 mx-auto relative" />
+        <p className="text-[9px] tracking-[0.3em] text-white/70 font-bold uppercase">REELS CUTTER</p>
+      </header>
 
-      <div className="w-full max-w-[550px] flex flex-col items-center gap-4 my-auto py-8">
+      <main className="w-full max-w-[550px] mx-auto flex flex-col items-center flex-1 justify-center px-2 md:px-6 gap-4 py-6">
         <div className="w-full bg-[#0c0c0c] border border-white/[0.05] rounded-[40px] p-4 md:p-6 relative group shadow-2xl">
           <div className="relative flex flex-col items-center gap-4">
             {videoUrl ? (
@@ -515,8 +515,8 @@ export default function ReelsCutterPage() {
             )}
           </div>
         </div>
-      </div>
+      </main>
       <LabelFooter />
-    </main>
+    </div>
   );
 }
