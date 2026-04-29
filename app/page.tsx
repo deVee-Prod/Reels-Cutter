@@ -288,7 +288,7 @@ export default function ReelsCutterPage() {
               <span className="text-[#D4AF37] text-[9px] tracking-[0.35em] uppercase font-semibold">1080p Vertical Video</span>
               <div className="h-px w-8 bg-[#D4AF37]/30" />
             </div>
-            <p dir="rtl" className="text-white text-[11px] tracking-[0.05em] font-light">מיוחד לסרטוני וידאו אנכי <span dir="ltr">1080p</span></p>
+            <p dir="rtl" className="text-white text-[11px] tracking-[0.05em] font-light">מיועד לסרטוני וידאו אנכי <span dir="ltr">1080p</span></p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4 bg-[#0c0c0c]/40 p-8 rounded-[24px] border border-white/5 backdrop-blur-xl w-full">
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-white/[0.02] border border-white/5 rounded-xl py-3 px-4 text-white text-center tracking-[0.4em] text-[9px] focus:outline-none" placeholder="ACCESS KEY" />
@@ -348,9 +348,9 @@ export default function ReelsCutterPage() {
                 </div>
 
                 {segments && (
-                  <div className="flex flex-col items-center gap-1 mb-2">
-                    <p className="text-white/40 text-[8px] tracking-[0.12em] font-light">Don&apos;t worry about the quality — it&apos;s just a preview</p>
-                    <p dir="rtl" className="text-white/40 text-[8px] tracking-[0.05em] font-light">לא לדאוג מהאיכות זה רק תצוגה מקדימה</p>
+                  <div className="flex flex-col items-center gap-1 -mt-4 mb-2 md:mt-0">
+                    <p className="text-white/60 text-[8px] tracking-[0.12em] font-light">Don&apos;t worry about the quality — it&apos;s just a preview</p>
+                    <p dir="rtl" className="text-white/60 text-[8px] tracking-[0.05em] font-light">לא לדאוג מהאיכות זה רק תצוגה מקדימה</p>
                   </div>
                 )}
 
