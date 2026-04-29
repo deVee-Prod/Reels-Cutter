@@ -500,18 +500,16 @@ export default function ReelsCutterPage() {
               </label>
             )}
 
-            {!segments ? (
-              <button
-                onClick={analyzeVideo}
-                disabled={processing || !videoFile}
-                className="w-full py-5 rounded-[22px] uppercase tracking-[0.4em] text-[10px] font-black transition-all duration-500"
-                style={{
-                  backgroundColor: videoFile ? '#D4AF37' : '#111111',
-                  color: videoFile ? '#000000' : 'rgba(255,255,255,0.15)',
-                }}
-              >
-                {processing ? "Analysing..." : "Extract Audio"}
+            {!segments && !videoFile && (
+              <button disabled className="w-full py-5 rounded-[22px] uppercase tracking-[0.4em] text-[10px] font-black cursor-default" style={{ backgroundColor: '#0e0e0e', color: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                Cut Video
               </button>
+            )}
+            {!segments && videoFile && (
+              <button onClick={analyzeVideo} disabled={processing} className="w-full py-5 rounded-[22px] uppercase tracking-[0.4em] text-[10px] font-black bg-[#D4AF37] text-black">
+                {processing ? "Analysing..." : "Cut Video"}
+              </button>
+            )}
             ) : (
               <button onClick={renderVideo} disabled={processing} className="w-full py-5 rounded-[22px] bg-[#D4AF37] text-black uppercase tracking-[0.4em] text-[10px] font-black">Export Master</button>
             )}
