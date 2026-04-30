@@ -324,7 +324,7 @@ export default function ReelsCutterPage() {
           const rs = remapToExportTime(w.start, segments, duration);
           const re = Math.max(rs + 0.08, remapToExportTime(w.end, segments, duration));
           const yPos = `h-(h*${subtitlePos}/100)-text_h`;
-          return `drawtext=fontfile='myfont.ttf':text='${safeWord}':enable='between(t,${rs.toFixed(3)},${re.toFixed(3)})':x=(w-text_w)/2:y=${yPos}:fontsize=${fontSize}:fontcolor=white:bordercolor=black@0.55:borderw=1.5:shadowx=0:shadowy=3:shadowcolor=black@0.8`;
+          return `drawtext=fontfile='myfont.ttf':text='${safeWord}':enable='between(t,${rs.toFixed(3)},${re.toFixed(3)})':x=(w-text_w)/2:y=${yPos}:fontsize=${fontSize}:fontcolor=0xEEEEEE:bordercolor=black@0.5:borderw=1.5:shadowx=0:shadowy=3:shadowcolor=black@0.8`;
         }).filter(Boolean);
         if (dtFilters.length > 0) drawtextChain = dtFilters.join(',') + ',';
       }
