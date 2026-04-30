@@ -49,7 +49,18 @@ export async function POST(req: NextRequest) {
       console.log(`[${i}] start: ${s.start.toFixed(2)}s end: ${s.end !== null ? s.end.toFixed(2) + 's' : 'END'}`);
     });
 
-    return NextResponse.json({ segments });
+    const subtitleWords = words.map((w, index) => {
+      const start = Math.max(0, w.start - 0.04);
+      let end = w.end;
+      const nextWord = words[index + 1];
+      if (nextWord) {
+        const nextStart = nextWord.start - 0.04;
+        if (end > nextStart) end = Math.max(start + 0.05, nextStart - 0.01);
+      }
+      return { word: w.word, start: Number(start.toFixed(3)), end: Number(end.toFixed(3)) };
+    });
+
+    return NextResponse.json({ segments, words: subtitleWords });
 
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });

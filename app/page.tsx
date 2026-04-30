@@ -30,6 +30,10 @@ export default function ReelsCutterPage() {
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [paused, setPaused] = useState(true);
   const [zoom, setZoom] = useState(4);
+  const [subtitleWords, setSubtitleWords] = useState<{word: string; start: number; end: number}[]>([]);
+  const [subtitlePanelOpen, setSubtitlePanelOpen] = useState(false);
+  const [subtitlePos, setSubtitlePos] = useState(25);
+  const [fontScale, setFontScale] = useState(1);
 
   const ffmpegRef = useRef<any>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -169,6 +173,8 @@ export default function ReelsCutterPage() {
       setVideoFile(file);
       setVideoUrl(URL.createObjectURL(file));
       setSegments(null);
+      setSubtitleWords([]);
+      setSubtitlePanelOpen(false);
       setProgress(0);
       setStatus("Ready");
     }
@@ -241,6 +247,7 @@ export default function ReelsCutterPage() {
 
       if (data.segments) {
         setSegments(data.segments);
+        if (data.words) setSubtitleWords(data.words);
         setStatus("Preparing edit...");
         setProgress(0);
         await warmupSegments(data.segments);
@@ -261,16 +268,51 @@ export default function ReelsCutterPage() {
     try {
       const { fetchFile } = await import('@ffmpeg/util');
       await ffmpegRef.current.writeFile('input.mov', await fetchFile(videoFile));
+
+      const withSubtitles = subtitlePanelOpen && subtitleWords.length > 0;
+      if (withSubtitles) {
+        setStatus("Loading font...");
+        const fontRes = await fetch('/Heebo.ttf');
+        if (!fontRes.ok) throw new Error('Heebo.ttf not found in /public');
+        await ffmpegRef.current.writeFile('myfont.ttf', new Uint8Array(await fontRes.arrayBuffer()));
+        setStatus("Rendering 1080p Master...");
+      }
+
+      // preview container is 200px wide → export is 1080px wide
+      const exportSizes = [14, 20, 28].map(s => Math.round(s * (1080 / 200) * fontScale));
+
       let f = '', c = '';
       segments.forEach((s, i) => {
-        const e = s.end ? s.end : duration;
-        f += `[0:v]trim=start=${s.start}:end=${e},setpts=PTS-STARTPTS[v${i}];[0:a]atrim=start=${s.start}:end=${e},asetpts=PTS-STARTPTS[a${i}];`;
+        const e = s.end ?? duration;
+        let drawPart = '';
+        if (withSubtitles) {
+          const wordsInSeg = subtitleWords.filter(w => w.start < e && w.end > s.start);
+          if (wordsInSeg.length > 0) {
+            const dtFilters = wordsInSeg.map(w => {
+              const globalIdx = subtitleWords.indexOf(w);
+              const fontSize = exportSizes[globalIdx % 3];
+              const safeWord = w.word.trim()
+                .replace(/'/g, '')
+                .replace(/:/g, '\\:')
+                .replace(/,/g, '\\,')
+                .replace(/\[/g, '\\[')
+                .replace(/\]/g, '\\]');
+              if (!safeWord) return null;
+              const yPos = `h-(h*${subtitlePos}/100)-text_h`;
+              return `drawtext=fontfile='myfont.ttf':text='${safeWord}':enable='between(t,${w.start},${w.end})':x=(w-text_w)/2:y=${yPos}:fontsize=${fontSize}:fontcolor=white:bordercolor=black:borderw=3`;
+            }).filter(Boolean);
+            if (dtFilters.length > 0) drawPart = dtFilters.join(',') + ',';
+          }
+        }
+        f += `[0:v]${drawPart}trim=start=${s.start}:end=${e},setpts=PTS-STARTPTS[v${i}];[0:a]atrim=start=${s.start}:end=${e},asetpts=PTS-STARTPTS[a${i}];`;
         c += `[v${i}][a${i}]`;
       });
       f += `${c}concat=n=${segments.length}:v=1:a=1[vraw][outa];[vraw]fps=30,scale=1080:-2[outv]`;
+
       await ffmpegRef.current.exec(['-i', 'input.mov', '-filter_complex', f, '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24', 'out.mp4']);
       const url = URL.createObjectURL(new Blob([(await ffmpegRef.current.readFile('out.mp4') as any).buffer], { type: 'video/mp4' }));
       const a = document.createElement('a'); a.href = url; a.download = `deVee_${videoFile.name}.mp4`; a.click();
+      if (withSubtitles) await ffmpegRef.current.deleteFile('myfont.ttf').catch(() => {});
     } catch (e) { setStatus("Error"); } finally { setProcessing(false); }
   };
 
@@ -332,6 +374,19 @@ export default function ReelsCutterPage() {
                   />
                   {/* Hidden prefetch video — pre-warms iOS decode cache for next segment */}
                   <video ref={prefetchVideoRef} src={videoUrl ?? undefined} muted playsInline className="absolute w-0 h-0 opacity-0 pointer-events-none" />
+                  {subtitlePanelOpen && subtitleWords.length > 0 && (() => {
+                    const wordObj = subtitleWords.find(w => currentTime >= w.start && currentTime <= w.end);
+                    if (!wordObj) return null;
+                    const idx = subtitleWords.indexOf(wordObj);
+                    const fontSize = [14, 20, 28][idx % 3] * fontScale;
+                    return (
+                      <div className="absolute left-0 right-0 flex justify-center px-2 pointer-events-none z-10" style={{ bottom: `${subtitlePos}%` }}>
+                        <span className="text-white font-black uppercase tracking-tighter leading-none" style={{ fontSize: `${fontSize}px`, textShadow: '0 1px 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9)' }}>
+                          {wordObj.word}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   {processing && (
                     <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center gap-3">
                       <span className="text-[#D4AF37] text-[10px] uppercase tracking-widest animate-pulse font-bold">{status}</span>
@@ -485,6 +540,29 @@ export default function ReelsCutterPage() {
                         className="px-6 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors"
                       >{paused ? 'Play' : 'Pause'}</button>
                     </div>
+
+                    {/* ── Subtitle toggle ── */}
+                    {subtitleWords.length > 0 && (
+                      <div className="flex flex-col items-center gap-2">
+                        <button
+                          onClick={() => setSubtitlePanelOpen(p => !p)}
+                          className={`px-5 py-1.5 text-[8px] uppercase tracking-widest rounded-lg border transition-colors ${subtitlePanelOpen ? 'bg-[#D4AF37]/10 border-[#D4AF37]/30 text-[#D4AF37]' : 'bg-white/[0.04] border-white/[0.07] text-white/30 hover:text-white/50'}`}
+                        >CC</button>
+                        {subtitlePanelOpen && (
+                          <div className="flex items-center justify-between w-full px-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-white/25 text-[7px] uppercase tracking-[0.2em]">Size</span>
+                              <input type="range" min="0.5" max="2" step="0.1" value={fontScale} onChange={e => setFontScale(parseFloat(e.target.value))} className="w-20 accent-[#D4AF37]" />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-white/25 text-[7px] uppercase tracking-[0.2em] mr-1">Pos</span>
+                              <button onClick={() => setSubtitlePos(p => Math.min(90, p + 5))} className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors">↑</button>
+                              <button onClick={() => setSubtitlePos(p => Math.max(5, p - 5))} className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors">↓</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                   </div>
                 )}
