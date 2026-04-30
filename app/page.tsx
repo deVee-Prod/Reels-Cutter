@@ -14,6 +14,21 @@ function LabelFooter() {
   );
 }
 
+function remapToExportTime(
+  t: number,
+  segs: { start: number; end: number | null }[],
+  dur: number
+): number {
+  let offset = 0;
+  for (const seg of segs) {
+    const segEnd = seg.end ?? dur;
+    if (t <= seg.start) return offset;
+    if (t < segEnd) return offset + (t - seg.start);
+    offset += segEnd - seg.start;
+  }
+  return offset;
+}
+
 export default function ReelsCutterPage() {
   const [authorized, setAuthorized] = useState(false);
   const [password, setPassword] = useState('');
@@ -30,8 +45,8 @@ export default function ReelsCutterPage() {
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [paused, setPaused] = useState(true);
   const [zoom, setZoom] = useState(4);
-  const [subtitleWords, setSubtitleWords] = useState<{word: string; start: number; end: number}[]>([]);
-  const [subtitlePanelOpen, setSubtitlePanelOpen] = useState(false);
+  const [subtitleWords, setSubtitleWords] = useState<{ word: string; start: number; end: number }[]>([]);
+  const [subtitleMode, setSubtitleMode] = useState(false);
   const [subtitlePos, setSubtitlePos] = useState(25);
   const [fontScale, setFontScale] = useState(1);
 
@@ -44,7 +59,6 @@ export default function ReelsCutterPage() {
   const segmentsRef = useRef<{ start: number; end: number | null }[] | null>(null);
   const durationRef = useRef<number>(0);
   const programmaticSeekRef = useRef(false);
-  const programmaticPauseRef = useRef(false);
   const warmingUpRef = useRef(false);
   const prefetchVideoRef = useRef<HTMLVideoElement>(null);
   const prefetchWarmedRef = useRef(false);
@@ -174,7 +188,7 @@ export default function ReelsCutterPage() {
       setVideoUrl(URL.createObjectURL(file));
       setSegments(null);
       setSubtitleWords([]);
-      setSubtitlePanelOpen(false);
+      setSubtitleMode(false);
       setProgress(0);
       setStatus("Ready");
     }
@@ -269,7 +283,7 @@ export default function ReelsCutterPage() {
       const { fetchFile } = await import('@ffmpeg/util');
       await ffmpegRef.current.writeFile('input.mov', await fetchFile(videoFile));
 
-      const withSubtitles = subtitlePanelOpen && subtitleWords.length > 0;
+      const withSubtitles = subtitleMode && subtitleWords.length > 0;
       if (withSubtitles) {
         setStatus("Loading font...");
         const fontRes = await fetch('/Heebo.ttf');
@@ -278,36 +292,38 @@ export default function ReelsCutterPage() {
         setStatus("Rendering 1080p Master...");
       }
 
-      // preview container is 200px wide → export is 1080px wide
-      const exportSizes = [14, 20, 28].map(s => Math.round(s * (1080 / 200) * fontScale));
-
+      // build trim chains — clean, no drawtext here
       let f = '', c = '';
       segments.forEach((s, i) => {
         const e = s.end ?? duration;
-        let drawPart = '';
-        if (withSubtitles) {
-          const wordsInSeg = subtitleWords.filter(w => w.start < e && w.end > s.start);
-          if (wordsInSeg.length > 0) {
-            const dtFilters = wordsInSeg.map(w => {
-              const globalIdx = subtitleWords.indexOf(w);
-              const fontSize = exportSizes[globalIdx % 3];
-              const safeWord = w.word.trim()
-                .replace(/'/g, '')
-                .replace(/:/g, '\\:')
-                .replace(/,/g, '\\,')
-                .replace(/\[/g, '\\[')
-                .replace(/\]/g, '\\]');
-              if (!safeWord) return null;
-              const yPos = `h-(h*${subtitlePos}/100)-text_h`;
-              return `drawtext=fontfile='myfont.ttf':text='${safeWord}':enable='between(t,${w.start},${w.end})':x=(w-text_w)/2:y=${yPos}:fontsize=${fontSize}:fontcolor=white:bordercolor=black:borderw=3`;
-            }).filter(Boolean);
-            if (dtFilters.length > 0) drawPart = dtFilters.join(',') + ',';
-          }
-        }
-        f += `[0:v]${drawPart}trim=start=${s.start}:end=${e},setpts=PTS-STARTPTS[v${i}];[0:a]atrim=start=${s.start}:end=${e},asetpts=PTS-STARTPTS[a${i}];`;
+        f += `[0:v]trim=start=${s.start}:end=${e},setpts=PTS-STARTPTS[v${i}];[0:a]atrim=start=${s.start}:end=${e},asetpts=PTS-STARTPTS[a${i}];`;
         c += `[v${i}][a${i}]`;
       });
-      f += `${c}concat=n=${segments.length}:v=1:a=1[vraw][outa];[vraw]fps=30,scale=1080:-2[outv]`;
+
+      // drawtext applied AFTER concat with remapped timestamps — cut words snap to nearest boundary
+      let drawtextChain = '';
+      if (withSubtitles) {
+        const exportScale = 1080 / 200;
+        const dtFilters = subtitleWords
+          .map((w, i) => {
+            const safeWord = w.word.trim()
+              .replace(/'/g, '')
+              .replace(/:/g, '\\:')
+              .replace(/,/g, '\\,')
+              .replace(/\[/g, '\\[')
+              .replace(/\]/g, '\\]');
+            if (!safeWord) return null;
+            const fontSize = Math.round([14, 20, 28][i % 3] * exportScale * fontScale);
+            const rs = remapToExportTime(w.start, segments, duration);
+            const re = Math.max(rs + 0.08, remapToExportTime(w.end, segments, duration));
+            const yPos = `h-(h*${subtitlePos}/100)-text_h`;
+            return `drawtext=fontfile='myfont.ttf':text='${safeWord}':enable='between(t,${rs.toFixed(3)},${re.toFixed(3)})':x=(w-text_w)/2:y=${yPos}:fontsize=${fontSize}:fontcolor=white:bordercolor=black:borderw=3`;
+          })
+          .filter(Boolean);
+        if (dtFilters.length > 0) drawtextChain = dtFilters.join(',') + ',';
+      }
+
+      f += `${c}concat=n=${segments.length}:v=1:a=1[vraw][outa];[vraw]${drawtextChain}fps=30,scale=1080:-2[outv]`;
 
       await ffmpegRef.current.exec(['-i', 'input.mov', '-filter_complex', f, '-map', '[outv]', '-map', '[outa]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24', 'out.mp4']);
       const url = URL.createObjectURL(new Blob([(await ffmpegRef.current.readFile('out.mp4') as any).buffer], { type: 'video/mp4' }));
@@ -343,6 +359,9 @@ export default function ReelsCutterPage() {
     );
   }
 
+  // compute once per render for subtitle overlay + word card highlighting
+  const remappedCurrentTime = segments ? remapToExportTime(currentTime, segments, duration) : currentTime;
+
   return (
     <div className="min-h-[100dvh] bg-[#050505] text-white flex flex-col items-center overflow-y-auto overflow-x-hidden font-sans">
       <header className="text-center space-y-2 pt-8 pb-6 relative">
@@ -356,6 +375,8 @@ export default function ReelsCutterPage() {
           <div className="relative flex flex-col items-center gap-4">
             {videoUrl ? (
               <div className="w-full flex flex-col items-center">
+
+                {/* ── Video preview ── */}
                 <div className="relative w-[200px] bg-black rounded-[30px] overflow-hidden border border-white/10 mb-2 shadow-inner flex-shrink-0" style={{ height: '356px' }}>
                   <video
                     ref={videoRef}
@@ -374,8 +395,14 @@ export default function ReelsCutterPage() {
                   />
                   {/* Hidden prefetch video — pre-warms iOS decode cache for next segment */}
                   <video ref={prefetchVideoRef} src={videoUrl ?? undefined} muted playsInline className="absolute w-0 h-0 opacity-0 pointer-events-none" />
-                  {subtitlePanelOpen && subtitleWords.length > 0 && (() => {
-                    const wordObj = subtitleWords.find(w => currentTime >= w.start && currentTime <= w.end);
+
+                  {/* Subtitle overlay */}
+                  {subtitleMode && subtitleWords.length > 0 && segments && (() => {
+                    const wordObj = subtitleWords.find(w => {
+                      const rs = remapToExportTime(w.start, segments, duration);
+                      const re = Math.max(rs + 0.08, remapToExportTime(w.end, segments, duration));
+                      return remappedCurrentTime >= rs && remappedCurrentTime <= re;
+                    });
                     if (!wordObj) return null;
                     const idx = subtitleWords.indexOf(wordObj);
                     const fontSize = [14, 20, 28][idx % 3] * fontScale;
@@ -387,6 +414,7 @@ export default function ReelsCutterPage() {
                       </div>
                     );
                   })()}
+
                   {processing && (
                     <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center gap-3">
                       <span className="text-[#D4AF37] text-[10px] uppercase tracking-widest animate-pulse font-bold">{status}</span>
@@ -409,159 +437,214 @@ export default function ReelsCutterPage() {
                   </div>
                 )}
 
+                {/* ── Bottom panel — two modes ── */}
                 {segments && (
                   <div className="w-full mb-6 space-y-2">
 
-                    {/* ── Zoom controls ── */}
-                    <div className="flex items-center justify-between px-0.5">
-                      <span className="text-white/25 text-[7px] uppercase tracking-[0.2em]">Edit</span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => { setZoom(z => Math.max(1, z / 2)); if (zoom <= 2 && timelineContainerRef.current) timelineContainerRef.current.scrollLeft = 0; }}
-                          className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors"
-                        >−</button>
-                        <span className="text-white/30 text-[9px] w-5 text-center">{zoom}×</span>
-                        <button
-                          onClick={() => setZoom(z => Math.min(16, z * 2))}
-                          className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors"
-                        >+</button>
-                      </div>
-                    </div>
+                    {!subtitleMode ? (
+                      <>
+                        {/* ── CUTTER MODE ── */}
 
-                    {/* ── Scrollable timeline container (delete buttons + bars together) ── */}
-                    <div ref={timelineContainerRef} className="w-full overflow-x-auto rounded-xl" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-
-                      {/* Delete buttons row — above the timeline bar, scrolls with it */}
-                      <div className="relative h-8" style={{ width: `${zoom * 100}%`, minWidth: '100%' }}>
-                        {segments.map((seg, i) => (
-                          <button
-                            key={`del-${i}`}
-                            className="absolute top-1 -translate-x-1/2 flex items-center justify-center w-6 h-6 text-red-500 hover:text-red-400 text-[14px] font-black leading-none z-20 transition-colors"
-                            style={{ left: `${(((seg.start + (seg.end ?? duration)) / 2) / duration) * 100}%` }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => { e.stopPropagation(); setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev); }}
-                          >×</button>
-                        ))}
-                      </div>
-
-                      {/* Timeline bar */}
-                      <div
-                        ref={timelineRef}
-                        className="relative h-20 md:h-14 bg-white/[0.03] border border-white/10 rounded-xl"
-                        style={{ width: `${zoom * 100}%`, minWidth: '100%', touchAction: zoom > 1 ? 'pan-x' : 'none' }}
-                      >
-                        {/* Segment bars */}
-                        {segments.map((seg, i) => (
-                          <div
-                            key={i}
-                            className="absolute top-0 bottom-0 cursor-ew-resize"
-                            style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%`, touchAction: 'none' }}
-                            onPointerDown={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              e.currentTarget.setPointerCapture(e.pointerId);
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              draggingRef.current = { index: i, edge: (e.clientX - rect.left) < rect.width / 2 ? 'start' : 'end' };
-                            }}
-                            onPointerMove={(e) => {
-                              if (!draggingRef.current || !timelineRef.current) return;
-                              const rect = timelineRef.current.getBoundingClientRect();
-                              const t = Math.max(0, Math.min(e.clientX - rect.left, rect.width)) / rect.width * duration;
-                              const { edge } = draggingRef.current;
-                              setSegments(prev => prev ? prev.map((s, idx) => {
-                                if (idx !== i) return s;
-                                if (edge === 'start') return { ...s, start: Math.min(t, (s.end ?? duration) - 0.1) };
-                                return { ...s, end: Math.max(t, s.start + 0.1) };
-                              }) : prev);
-                            }}
-                            onPointerUp={(e) => {
-                              e.currentTarget.releasePointerCapture(e.pointerId);
-                              const dragIdx = draggingRef.current?.index ?? i;
-                              draggingRef.current = null;
-                              const seg = segmentsRef.current?.[dragIdx];
-                              if (videoRef.current && seg) videoRef.current.currentTime = seg.start;
-                              if (videoRef.current && !videoRef.current.paused) startLoop();
-                            }}
-                          >
-                            {/* Left solid handle */}
-                            <div className="absolute left-0 top-0 h-full w-2 bg-[#D4AF37] rounded-l-sm pointer-events-none" />
-                            {/* Center body */}
-                            <div className="absolute left-2 right-2 top-0 bottom-0 bg-[#D4AF37]/30 pointer-events-none" />
-                            {/* Right solid handle */}
-                            <div className="absolute right-0 top-0 h-full w-2 bg-[#D4AF37] rounded-r-sm pointer-events-none" />
+                        {/* Zoom controls */}
+                        <div className="flex items-center justify-between px-0.5">
+                          <span className="text-white/25 text-[7px] uppercase tracking-[0.2em]">Edit</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => { setZoom(z => Math.max(1, z / 2)); if (zoom <= 2 && timelineContainerRef.current) timelineContainerRef.current.scrollLeft = 0; }}
+                              className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors"
+                            >−</button>
+                            <span className="text-white/30 text-[9px] w-5 text-center">{zoom}×</span>
+                            <button
+                              onClick={() => setZoom(z => Math.min(16, z * 2))}
+                              className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors"
+                            >+</button>
                           </div>
-                        ))}
+                        </div>
 
-                        {/* Playhead */}
-                        <div className="absolute top-0 bottom-0 w-[2px] bg-white/70 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }} />
-                      </div>
-                    </div>
+                        {/* Scrollable timeline */}
+                        <div ref={timelineContainerRef} className="w-full overflow-x-auto rounded-xl" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+                          {/* Delete buttons row */}
+                          <div className="relative h-8" style={{ width: `${zoom * 100}%`, minWidth: '100%' }}>
+                            {segments.map((seg, i) => (
+                              <button
+                                key={`del-${i}`}
+                                className="absolute top-1 -translate-x-1/2 flex items-center justify-center w-6 h-6 text-red-500 hover:text-red-400 text-[14px] font-black leading-none z-20 transition-colors"
+                                style={{ left: `${(((seg.start + (seg.end ?? duration)) / 2) / duration) * 100}%` }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => { e.stopPropagation(); setSegments(prev => prev ? prev.filter((_, idx) => idx !== i) : prev); }}
+                              >×</button>
+                            ))}
+                          </div>
 
-                    {/* ── Seek bar ── */}
-                    <div
-                      ref={seekBarRef}
-                      className="relative w-full h-10 md:h-6 flex items-center cursor-pointer"
-                      style={{ touchAction: 'none' }}
-                      onClick={(e) => { if (!seekBarRef.current || !videoRef.current) return; const rect = seekBarRef.current.getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
-                    >
-                      <div className="relative w-full h-[3px] bg-white/[0.08] rounded-full pointer-events-none">
-                        <div className="absolute left-0 top-0 h-full bg-[#D4AF37]/50 rounded-full" style={{ width: `${(currentTime / duration) * 100}%` }} />
-                      </div>
-                      <div
-                        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 md:w-3 md:h-3 rounded-full bg-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.45)] cursor-grab active:cursor-grabbing pointer-events-auto"
-                        style={{ left: `${(currentTime / duration) * 100}%` }}
-                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); seekDraggingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); }}
-                        onPointerMove={(e) => { if (!seekDraggingRef.current || !seekBarRef.current || !videoRef.current) return; const rect = seekBarRef.current.getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
-                        onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); if (videoRef.current && !videoRef.current.paused) startLoop(); }}
-                      />
-                    </div>
+                          {/* Timeline bar */}
+                          <div
+                            ref={timelineRef}
+                            className="relative h-20 md:h-14 bg-white/[0.03] border border-white/10 rounded-xl"
+                            style={{ width: `${zoom * 100}%`, minWidth: '100%', touchAction: zoom > 1 ? 'pan-x' : 'none' }}
+                          >
+                            {segments.map((seg, i) => (
+                              <div
+                                key={i}
+                                className="absolute top-0 bottom-0 cursor-ew-resize"
+                                style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%`, touchAction: 'none' }}
+                                onPointerDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  e.currentTarget.setPointerCapture(e.pointerId);
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  draggingRef.current = { index: i, edge: (e.clientX - rect.left) < rect.width / 2 ? 'start' : 'end' };
+                                }}
+                                onPointerMove={(e) => {
+                                  if (!draggingRef.current || !timelineRef.current) return;
+                                  const rect = timelineRef.current.getBoundingClientRect();
+                                  const t = Math.max(0, Math.min(e.clientX - rect.left, rect.width)) / rect.width * duration;
+                                  const { edge } = draggingRef.current;
+                                  setSegments(prev => prev ? prev.map((s, idx) => {
+                                    if (idx !== i) return s;
+                                    if (edge === 'start') return { ...s, start: Math.min(t, (s.end ?? duration) - 0.1) };
+                                    return { ...s, end: Math.max(t, s.start + 0.1) };
+                                  }) : prev);
+                                }}
+                                onPointerUp={(e) => {
+                                  e.currentTarget.releasePointerCapture(e.pointerId);
+                                  const dragIdx = draggingRef.current?.index ?? i;
+                                  draggingRef.current = null;
+                                  const seg = segmentsRef.current?.[dragIdx];
+                                  if (videoRef.current && seg) videoRef.current.currentTime = seg.start;
+                                  if (videoRef.current && !videoRef.current.paused) startLoop();
+                                }}
+                              >
+                                <div className="absolute left-0 top-0 h-full w-2 bg-[#D4AF37] rounded-l-sm pointer-events-none" />
+                                <div className="absolute left-2 right-2 top-0 bottom-0 bg-[#D4AF37]/30 pointer-events-none" />
+                                <div className="absolute right-0 top-0 h-full w-2 bg-[#D4AF37] rounded-r-sm pointer-events-none" />
+                              </div>
+                            ))}
+                            <div className="absolute top-0 bottom-0 w-[2px] bg-white/70 pointer-events-none" style={{ left: `${(currentTime / duration) * 100}%` }} />
+                          </div>
+                        </div>
 
-                    {/* ── Play / Pause toggle ── */}
-                    <div className="flex justify-center items-center gap-3">
-                      <button
-                        onClick={() => {
-                          const v = videoRef.current;
-                          const segs = segmentsRef.current;
-                          if (!v) return;
-                          v.pause();
-                          v.currentTime = segs?.[0]?.start ?? 0;
-                          setPaused(true);
-                        }}
-                        className="w-9 h-9 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg transition-colors"
-                        title="Back to start"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                          <rect x="1" y="2" width="2" height="10" rx="1" fill="currentColor" className="text-white/60" />
-                          <path d="M13 2.5L5 7l8 4.5V2.5Z" fill="currentColor" className="text-white/60" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => paused ? videoRef.current?.play() : videoRef.current?.pause()}
-                        className="px-6 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors"
-                      >{paused ? 'Play' : 'Pause'}</button>
-                    </div>
+                        {/* Seek bar */}
+                        <div
+                          ref={seekBarRef}
+                          className="relative w-full h-10 md:h-6 flex items-center cursor-pointer"
+                          style={{ touchAction: 'none' }}
+                          onClick={(e) => { if (!seekBarRef.current || !videoRef.current) return; const rect = seekBarRef.current.getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                        >
+                          <div className="relative w-full h-[3px] bg-white/[0.08] rounded-full pointer-events-none">
+                            <div className="absolute left-0 top-0 h-full bg-[#D4AF37]/50 rounded-full" style={{ width: `${(currentTime / duration) * 100}%` }} />
+                          </div>
+                          <div
+                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 md:w-3 md:h-3 rounded-full bg-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.45)] cursor-grab active:cursor-grabbing pointer-events-auto"
+                            style={{ left: `${(currentTime / duration) * 100}%` }}
+                            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); seekDraggingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); }}
+                            onPointerMove={(e) => { if (!seekDraggingRef.current || !seekBarRef.current || !videoRef.current) return; const rect = seekBarRef.current.getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                            onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); if (videoRef.current && !videoRef.current.paused) startLoop(); }}
+                          />
+                        </div>
 
-                    {/* ── Subtitle toggle ── */}
-                    {subtitleWords.length > 0 && (
-                      <div className="flex flex-col items-center gap-2">
-                        <button
-                          onClick={() => setSubtitlePanelOpen(p => !p)}
-                          className={`px-5 py-1.5 text-[8px] uppercase tracking-widest rounded-lg border transition-colors ${subtitlePanelOpen ? 'bg-[#D4AF37]/10 border-[#D4AF37]/30 text-[#D4AF37]' : 'bg-white/[0.04] border-white/[0.07] text-white/30 hover:text-white/50'}`}
-                        >CC</button>
-                        {subtitlePanelOpen && (
-                          <div className="flex items-center justify-between w-full px-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-white/25 text-[7px] uppercase tracking-[0.2em]">Size</span>
-                              <input type="range" min="0.5" max="2" step="0.1" value={fontScale} onChange={e => setFontScale(parseFloat(e.target.value))} className="w-20 accent-[#D4AF37]" />
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-white/25 text-[7px] uppercase tracking-[0.2em] mr-1">Pos</span>
-                              <button onClick={() => setSubtitlePos(p => Math.min(90, p + 5))} className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors">↑</button>
-                              <button onClick={() => setSubtitlePos(p => Math.max(5, p - 5))} className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors">↓</button>
-                            </div>
+                        {/* Play / Pause */}
+                        <div className="flex justify-center items-center gap-3">
+                          <button
+                            onClick={() => { const v = videoRef.current; const segs = segmentsRef.current; if (!v) return; v.pause(); v.currentTime = segs?.[0]?.start ?? 0; setPaused(true); }}
+                            className="w-9 h-9 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg transition-colors"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                              <rect x="1" y="2" width="2" height="10" rx="1" fill="currentColor" className="text-white/60" />
+                              <path d="M13 2.5L5 7l8 4.5V2.5Z" fill="currentColor" className="text-white/60" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => paused ? videoRef.current?.play() : videoRef.current?.pause()}
+                            className="px-6 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors"
+                          >{paused ? 'Play' : 'Pause'}</button>
+                        </div>
+
+                        {/* CC button — enter subtitle mode */}
+                        {subtitleWords.length > 0 && (
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => setSubtitleMode(true)}
+                              className="px-5 py-1.5 text-[8px] uppercase tracking-widest rounded-lg border bg-white/[0.04] border-white/[0.07] text-white/30 hover:text-white/50 transition-colors"
+                            >CC</button>
                           </div>
                         )}
-                      </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* ── SUBTITLE MODE ── */}
+
+                        {/* Seek bar — kept for timing reference */}
+                        <div
+                          className="relative w-full h-10 md:h-6 flex items-center cursor-pointer"
+                          style={{ touchAction: 'none' }}
+                          onClick={(e) => { if (!seekBarRef.current || !videoRef.current) return; const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                        >
+                          <div className="relative w-full h-[3px] bg-white/[0.08] rounded-full pointer-events-none">
+                            <div className="absolute left-0 top-0 h-full bg-[#D4AF37]/50 rounded-full" style={{ width: `${(currentTime / duration) * 100}%` }} />
+                          </div>
+                          <div
+                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 md:w-3 md:h-3 rounded-full bg-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.45)] cursor-grab active:cursor-grabbing pointer-events-auto"
+                            style={{ left: `${(currentTime / duration) * 100}%` }}
+                            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); seekDraggingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); }}
+                            onPointerMove={(e) => { if (!seekDraggingRef.current || !videoRef.current) return; const rect = (e.currentTarget.parentElement as HTMLDivElement).getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                            onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); if (videoRef.current && !videoRef.current.paused) startLoop(); }}
+                          />
+                        </div>
+
+                        {/* Word cards */}
+                        <div className="w-full h-24 bg-white/[0.02] border border-white/[0.05] rounded-xl p-3 flex gap-2 items-center overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+                          {subtitleWords.length > 0 ? subtitleWords.map((w, i) => {
+                            const isCut = !segments.some(s => w.start < (s.end ?? duration) && w.end > s.start);
+                            const rs = remapToExportTime(w.start, segments, duration);
+                            const re = Math.max(rs + 0.08, remapToExportTime(w.end, segments, duration));
+                            const isActive = remappedCurrentTime >= rs && remappedCurrentTime <= re;
+                            return (
+                              <div
+                                key={i}
+                                className={`h-full min-w-[64px] border rounded-xl flex flex-col items-center justify-center p-1.5 relative flex-shrink-0 transition-all ${
+                                  isActive
+                                    ? 'bg-[#D4AF37]/20 border-[#D4AF37]/60'
+                                    : isCut
+                                    ? 'bg-white/[0.01] border-white/[0.04] opacity-35'
+                                    : 'bg-white/[0.02] border-white/[0.06]'
+                                }`}
+                              >
+                                <input
+                                  value={w.word}
+                                  onChange={(e) => {
+                                    const updated = [...subtitleWords];
+                                    updated[i] = { ...updated[i], word: e.target.value };
+                                    setSubtitleWords(updated);
+                                  }}
+                                  className="bg-transparent border-none outline-none text-[9px] text-white font-bold text-center w-full"
+                                />
+                                <button
+                                  onClick={() => setSubtitleWords(prev => prev.filter((_, idx) => idx !== i))}
+                                  className="absolute -top-1 -right-1 w-4 h-4 bg-red-500/40 rounded-full text-[7px] flex items-center justify-center hover:bg-red-500/70 transition-colors"
+                                >×</button>
+                              </div>
+                            );
+                          }) : (
+                            <span className="text-white/20 text-[8px] uppercase tracking-widest w-full text-center">No words</span>
+                          )}
+                        </div>
+
+                        {/* Size + Pos + Back */}
+                        <div className="flex items-center justify-between px-0.5">
+                          <button
+                            onClick={() => setSubtitleMode(false)}
+                            className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors"
+                          >←</button>
+                          <div className="flex items-center gap-2">
+                            <span className="text-white/25 text-[7px] uppercase tracking-[0.2em]">Size</span>
+                            <input type="range" min="0.5" max="2" step="0.1" value={fontScale} onChange={e => setFontScale(parseFloat(e.target.value))} className="w-20 accent-[#D4AF37]" />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => setSubtitlePos(p => Math.min(90, p + 5))} className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors">↑</button>
+                            <button onClick={() => setSubtitlePos(p => Math.max(5, p - 5))} className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors">↓</button>
+                          </div>
+                        </div>
+                      </>
                     )}
 
                   </div>
