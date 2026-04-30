@@ -502,12 +502,7 @@ export default function ReelsCutterPage() {
                         {subtitleWords.length > 0 && (
                           <div className="flex justify-center items-center gap-3">
                             <button onClick={() => setSubtitleMode(true)} className="px-5 py-1.5 text-[8px] uppercase tracking-widest rounded-lg border bg-white/[0.04] border-white/[0.07] text-white/30 hover:text-white/50 transition-colors">CC</button>
-                            <button onClick={() => setSubtitleAlwaysShow(p => !p)} className="flex items-center gap-1.5 flex-shrink-0">
-                              <div className={`w-4 h-4 rounded flex items-center justify-center border transition-colors flex-shrink-0 ${subtitleAlwaysShow ? 'bg-white/30 border-white/50' : 'bg-white/[0.04] border-white/[0.07]'}`}>
-                                {subtitleAlwaysShow && <span className="text-white text-[8px] font-black leading-none">✓</span>}
-                              </div>
-                              <span className="text-white/30 text-[7px] uppercase tracking-[0.15em]">CC Visible</span>
-                            </button>
+                            <button onClick={() => setSubtitleAlwaysShow(p => !p)} className={`px-5 py-1.5 text-[8px] uppercase tracking-widest rounded-lg border transition-colors ${subtitleAlwaysShow ? 'bg-white/[0.12] border-white/40 text-white/80' : 'bg-white/[0.04] border-white/[0.07] text-white/30 hover:text-white/50'}`}>CC Visible</button>
                           </div>
                         )}
                       </>
@@ -565,12 +560,7 @@ export default function ReelsCutterPage() {
                             <button onClick={() => setSubtitlePos(p => Math.max(5, p - 5))} className="w-7 h-7 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.09] border border-white/[0.07] rounded-lg text-white/50 text-sm transition-colors">↓</button>
                           </div>
                           {/* Show subtitles in cut mode toggle */}
-                          <button onClick={() => setSubtitleAlwaysShow(p => !p)} className="flex items-center gap-1.5 flex-shrink-0">
-                            <div className={`w-4 h-4 rounded flex items-center justify-center border transition-colors flex-shrink-0 ${subtitleAlwaysShow ? 'bg-white/30 border-white/50' : 'bg-white/[0.04] border-white/[0.07]'}`}>
-                              {subtitleAlwaysShow && <span className="text-white text-[8px] font-black leading-none">✓</span>}
-                            </div>
-                            <span className="text-white/30 text-[7px] uppercase tracking-[0.15em]">CC Visible</span>
-                          </button>
+                          <button onClick={() => setSubtitleAlwaysShow(p => !p)} className={`px-5 py-1.5 text-[8px] uppercase tracking-widest rounded-lg border transition-colors ${subtitleAlwaysShow ? 'bg-white/[0.12] border-white/40 text-white/80' : 'bg-white/[0.04] border-white/[0.07] text-white/30 hover:text-white/50'}`}>CC Visible</button>
                         </div>
                       </>
                     )}
