@@ -366,10 +366,7 @@ export default function ReelsCutterPage() {
         <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.9rem', fontFamily: 'sans-serif', lineHeight: 1.6, maxWidth: 320 }}>
           זהו כלי פרימיום.<br />התחבר עם חשבון Google שלך באתר deVee Music כדי לקבל גישה.
         </p>
-        <a href="https://devee-music.com" style={{ marginTop: '0.5rem', padding: '0.65rem 2rem', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: '0.85rem', fontFamily: 'sans-serif', fontWeight: 600, textDecoration: 'none', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Sign in at deVee Music
-        </a>
-        <a href="https://devee-music.com" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.7rem', fontFamily: 'sans-serif', textDecoration: 'none', letterSpacing: '0.05em' }}>
+        <a href="https://devee-music.com" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', fontFamily: 'sans-serif', textDecoration: 'none', letterSpacing: '0.05em' }}>
           ← Back to deVee Music
         </a>
       </div>
