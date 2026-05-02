@@ -60,9 +60,12 @@ export default function ReelsCutterPage() {
   const [zoomPerCut, setZoomPerCut] = useState(false);
   const [zoomMode, setZoomMode] = useState(false);
   const [zoomFreq, setZoomFreq] = useState<1 | 4>(1);
+  const [activeIsA, setActiveIsA] = useState(true);
 
   const ffmpegRef = useRef<any>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoARef = useRef<HTMLVideoElement>(null);
+  const videoBRef = useRef<HTMLVideoElement>(null);
+  const activeIsARef = useRef(true);
   const timelineRef = useRef<HTMLDivElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const wordCardsRef = useRef<HTMLDivElement>(null);
@@ -73,8 +76,8 @@ export default function ReelsCutterPage() {
   const durationRef = useRef<number>(0);
   const programmaticSeekRef = useRef(false);
   const warmingUpRef = useRef(false);
-  const prefetchVideoRef = useRef<HTMLVideoElement>(null);
   const prefetchWarmedRef = useRef(false);
+  const bufferReadyRef = useRef(false);
   const lastSegIdxRef = useRef(-1);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDraggingRef = useRef(false);
@@ -125,6 +128,9 @@ export default function ReelsCutterPage() {
     container.scrollLeft = Math.max(0, card.offsetLeft - container.clientWidth / 2 + card.offsetWidth / 2);
   }, [currentTime, segments, subtitleWords, duration, subtitleMode]);
 
+  const getAV = () => activeIsARef.current ? videoARef.current : videoBRef.current;
+  const getBV = () => activeIsARef.current ? videoBRef.current : videoARef.current;
+
   const stopLoop = () => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -135,43 +141,77 @@ export default function ReelsCutterPage() {
   const startLoop = () => {
     stopLoop();
     const tick = () => {
-      const v = videoRef.current;
+      const v = getAV();
       const segs = segmentsRef.current;
       const dur = durationRef.current;
       if (!v || !segs || v.paused || draggingRef.current || seekDraggingRef.current || warmingUpRef.current) { rafRef.current = null; return; }
       const t = v.currentTime;
       const inSeg = segs.find(s => t >= s.start && t <= (s.end ?? dur));
 
-      const jumpTo = (target: number) => {
+      // Fallback seek — used for gap-jumps and when buffer isn't ready
+      const seekFallback = (target: number) => {
+        const av = getAV();
+        if (!av) return;
         programmaticSeekRef.current = true;
-        v.muted = true;
-        v.currentTime = target;
-        const fallback = setTimeout(() => { if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, 800);
-        v.addEventListener('seeked', () => { clearTimeout(fallback); if (videoRef.current) { videoRef.current.muted = false; startLoop(); } }, { once: true });
+        av.muted = true;
+        av.currentTime = target;
+        const fallback = setTimeout(() => { const av2 = getAV(); if (av2) { av2.muted = false; startLoop(); } }, 800);
+        av.addEventListener('seeked', () => { clearTimeout(fallback); const av2 = getAV(); if (av2) { av2.muted = false; startLoop(); } }, { once: true });
       };
 
       if (!inSeg) {
         const next = segs.filter(s => s.start > t).sort((a, b) => a.start - b.start)[0];
-        if (next) jumpTo(next.start); else v.pause();
+        if (next) seekFallback(next.start); else v.pause();
         rafRef.current = null; return;
       }
 
       const idx = segs.indexOf(inSeg);
-      if (idx !== lastSegIdxRef.current) { lastSegIdxRef.current = idx; prefetchWarmedRef.current = false; }
+      if (idx !== lastSegIdxRef.current) { lastSegIdxRef.current = idx; prefetchWarmedRef.current = false; bufferReadyRef.current = false; }
+
+      // STEP 1 — warm the buffer: seek it to nextSeg.start, play 400ms, re-seek to exact start
       if (inSeg.end !== null && t >= inSeg.end - 1.5 && !prefetchWarmedRef.current) {
         const nextSeg = segs[idx + 1];
-        const pv = prefetchVideoRef.current;
-        if (nextSeg && pv) {
+        const bv = getBV();
+        if (nextSeg && bv) {
           prefetchWarmedRef.current = true;
-          pv.currentTime = nextSeg.start;
-          pv.play().catch(() => {});
-          setTimeout(() => { if (prefetchVideoRef.current) prefetchVideoRef.current.pause(); }, 500);
+          bufferReadyRef.current = false;
+          bv.muted = true;
+          bv.currentTime = nextSeg.start;
+          bv.play().catch(() => {});
+          setTimeout(() => {
+            if (!bv) return;
+            bv.pause();
+            bv.currentTime = nextSeg.start;
+            const onReady = () => { bufferReadyRef.current = true; };
+            bv.addEventListener('seeked', onReady, { once: true });
+            setTimeout(() => { bufferReadyRef.current = true; }, 200);
+          }, 400);
         }
       }
 
-      if (inSeg.end !== null && t >= inSeg.end - 0.2) {
+      // STEP 2 — swap: at cut time, show buffer instead of seeking active video
+      if (inSeg.end !== null && t >= inSeg.end - 0.1) {
         const nextSeg = segs[idx + 1];
-        if (nextSeg) jumpTo(nextSeg.start); else v.pause();
+        if (nextSeg) {
+          const bv = getBV();
+          if (bv && bufferReadyRef.current) {
+            bv.muted = false;
+            bv.play().then(() => {
+              v.pause();
+              v.muted = true;
+              activeIsARef.current = !activeIsARef.current;
+              setActiveIsA(activeIsARef.current);
+              lastSegIdxRef.current = idx + 1;
+              prefetchWarmedRef.current = false;
+              bufferReadyRef.current = false;
+              startLoop();
+            }).catch(() => seekFallback(nextSeg.start));
+          } else {
+            seekFallback(nextSeg.start);
+          }
+        } else {
+          v.pause();
+        }
         rafRef.current = null; return;
       }
       rafRef.current = requestAnimationFrame(tick);
@@ -183,7 +223,8 @@ export default function ReelsCutterPage() {
     const handlePointerUp = () => {
       if (draggingRef.current) {
         draggingRef.current = null;
-        if (videoRef.current && !videoRef.current.paused) startLoop();
+        const av = getAV();
+        if (av && !av.paused) startLoop();
       }
     };
     window.addEventListener('pointerup', handlePointerUp);
@@ -191,7 +232,8 @@ export default function ReelsCutterPage() {
   }, []);
 
   const handleTimeUpdate = () => {
-    if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
+    const av = getAV();
+    if (av) setCurrentTime(av.currentTime);
   };
 
   const loadFFmpeg = async () => {
@@ -228,11 +270,13 @@ export default function ReelsCutterPage() {
       setSubtitleAlwaysShow(false);
       setProgress(0);
       setStatus("Ready");
+      activeIsARef.current = true;
+      setActiveIsA(true);
     }
   };
 
   const warmupSegments = async (segs: { start: number; end: number | null }[]) => {
-    const video = videoRef.current;
+    const video = videoARef.current;
     if (!video || segs.length === 0) return;
     const globalDeadline = Date.now() + 25000;
     if (video.readyState < 2) {
@@ -431,24 +475,44 @@ export default function ReelsCutterPage() {
               <div className="w-full flex flex-col items-center">
 
                 {/* ── Video preview ── */}
-                <div className="relative w-[200px] bg-black rounded-[30px] overflow-hidden border border-white/10 mb-2 shadow-inner flex-shrink-0" style={{ height: '356px' }}>
+                <div
+                  className="relative w-[200px] bg-black rounded-[30px] overflow-hidden border border-white/10 mb-2 shadow-inner flex-shrink-0"
+                  style={{ height: '356px' }}
+                  onClick={() => { const av = getAV(); av?.paused ? av.play() : av?.pause(); }}
+                >
+                  {/* Video A */}
                   <video
-                    ref={videoRef}
+                    ref={videoARef}
                     src={videoUrl}
                     onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
                     onTimeUpdate={handleTimeUpdate}
-                    onPlay={() => { if (!warmingUpRef.current) setPaused(false); startLoop(); }}
+                    onPlay={() => { if (!activeIsARef.current) return; if (!warmingUpRef.current) setPaused(false); startLoop(); }}
                     onSeeked={(e) => {
+                      if (!activeIsARef.current) return;
                       if (programmaticSeekRef.current) { programmaticSeekRef.current = false; return; }
                       if (!e.currentTarget.paused && !draggingRef.current && !seekDraggingRef.current) startLoop();
                     }}
-                    onPause={() => { stopLoop(); if (!warmingUpRef.current) setPaused(true); }}
-                    className="w-full h-full object-cover"
-                    style={{ transform: `scale(${previewZoom})`, transition: 'transform 0.06s ease' }}
+                    onPause={() => { if (!activeIsARef.current) return; stopLoop(); if (!warmingUpRef.current) setPaused(true); }}
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                    style={{ opacity: activeIsA ? 1 : 0, zIndex: activeIsA ? 1 : 0, transform: `scale(${previewZoom})`, transition: 'transform 0.06s ease' }}
                     playsInline
-                    onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
                   />
-                  <video ref={prefetchVideoRef} src={videoUrl ?? undefined} muted playsInline className="absolute w-0 h-0 opacity-0 pointer-events-none" />
+                  {/* Video B — buffer; swaps with A at each cut */}
+                  <video
+                    ref={videoBRef}
+                    src={videoUrl ?? undefined}
+                    onTimeUpdate={handleTimeUpdate}
+                    onPlay={() => { if (activeIsARef.current) return; if (!warmingUpRef.current) setPaused(false); startLoop(); }}
+                    onSeeked={(e) => {
+                      if (activeIsARef.current) return;
+                      if (programmaticSeekRef.current) { programmaticSeekRef.current = false; return; }
+                      if (!e.currentTarget.paused && !draggingRef.current && !seekDraggingRef.current) startLoop();
+                    }}
+                    onPause={() => { if (activeIsARef.current) return; stopLoop(); if (!warmingUpRef.current) setPaused(true); }}
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                    style={{ opacity: activeIsA ? 0 : 1, zIndex: activeIsA ? 0 : 1, transform: `scale(${previewZoom})`, transition: 'transform 0.06s ease' }}
+                    playsInline
+                  />
 
                   {/* Subtitle overlay — visible in both CC mode and when subtitleAlwaysShow is on */}
                   {showSubtitleOverlay && (() => {
@@ -470,7 +534,7 @@ export default function ReelsCutterPage() {
                   })()}
 
                   {processing && (
-                    <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center gap-3">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center gap-3 z-10">
                       <span className="text-[#D4AF37] text-[10px] uppercase tracking-widest animate-pulse font-bold">{status}</span>
                       {progress > 0 && (
                         <div className="w-[140px] flex flex-col items-center gap-1">
@@ -518,7 +582,7 @@ export default function ReelsCutterPage() {
                               <div key={i} className="absolute top-0 bottom-0 cursor-ew-resize" style={{ left: `${(seg.start / duration) * 100}%`, width: `${(((seg.end ?? duration) - seg.start) / duration) * 100}%`, touchAction: 'none' }}
                                 onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); const rect = e.currentTarget.getBoundingClientRect(); draggingRef.current = { index: i, edge: (e.clientX - rect.left) < rect.width / 2 ? 'start' : 'end' }; }}
                                 onPointerMove={(e) => { if (!draggingRef.current || !timelineRef.current) return; const rect = timelineRef.current.getBoundingClientRect(); const t = Math.max(0, Math.min(e.clientX - rect.left, rect.width)) / rect.width * duration; const { edge } = draggingRef.current; setSegments(prev => prev ? prev.map((s, idx) => { if (idx !== i) return s; if (edge === 'start') return { ...s, start: Math.min(t, (s.end ?? duration) - 0.1) }; return { ...s, end: Math.max(t, s.start + 0.1) }; }) : prev); }}
-                                onPointerUp={(e) => { e.currentTarget.releasePointerCapture(e.pointerId); const dragIdx = draggingRef.current?.index ?? i; draggingRef.current = null; const seg = segmentsRef.current?.[dragIdx]; if (videoRef.current && seg) videoRef.current.currentTime = seg.start; if (videoRef.current && !videoRef.current.paused) startLoop(); }}
+                                onPointerUp={(e) => { e.currentTarget.releasePointerCapture(e.pointerId); const dragIdx = draggingRef.current?.index ?? i; draggingRef.current = null; const seg = segmentsRef.current?.[dragIdx]; const av = getAV(); if (av && seg) av.currentTime = seg.start; if (av && !av.paused) startLoop(); }}
                               >
                                 <div className="absolute left-0 top-0 h-full w-2 bg-[#D4AF37] rounded-l-sm pointer-events-none" />
                                 <div className="absolute left-2 right-2 top-0 bottom-0 bg-[#D4AF37]/30 pointer-events-none" />
@@ -529,22 +593,22 @@ export default function ReelsCutterPage() {
                           </div>
                         </div>
 
-                        <div ref={seekBarRef} className="relative w-full h-10 md:h-6 flex items-center cursor-pointer" style={{ touchAction: 'none' }} onClick={(e) => { if (!seekBarRef.current || !videoRef.current) return; const rect = seekBarRef.current.getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}>
+                        <div ref={seekBarRef} className="relative w-full h-10 md:h-6 flex items-center cursor-pointer" style={{ touchAction: 'none' }} onClick={(e) => { const av = getAV(); if (!seekBarRef.current || !av) return; const rect = seekBarRef.current.getBoundingClientRect(); av.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}>
                           <div className="relative w-full h-[3px] bg-white/[0.08] rounded-full pointer-events-none">
                             <div className="absolute left-0 top-0 h-full bg-[#D4AF37]/50 rounded-full" style={{ width: `${(currentTime / duration) * 100}%` }} />
                           </div>
                           <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 md:w-3 md:h-3 rounded-full bg-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.45)] cursor-grab active:cursor-grabbing pointer-events-auto" style={{ left: `${(currentTime / duration) * 100}%` }}
                             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); seekDraggingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); }}
-                            onPointerMove={(e) => { if (!seekDraggingRef.current || !seekBarRef.current || !videoRef.current) return; const rect = seekBarRef.current.getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
-                            onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); if (videoRef.current && !videoRef.current.paused) startLoop(); }}
+                            onPointerMove={(e) => { const av = getAV(); if (!seekDraggingRef.current || !seekBarRef.current || !av) return; const rect = seekBarRef.current.getBoundingClientRect(); av.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                            onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); const av = getAV(); if (av && !av.paused) startLoop(); }}
                           />
                         </div>
 
                         <div className="flex justify-center items-center gap-3">
-                          <button onClick={() => { const v = videoRef.current; const segs = segmentsRef.current; if (!v) return; v.pause(); v.currentTime = segs?.[0]?.start ?? 0; setPaused(true); }} className="w-9 h-9 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg transition-colors">
+                          <button onClick={() => { const v = getAV(); const segs = segmentsRef.current; if (!v) return; v.pause(); v.currentTime = segs?.[0]?.start ?? 0; setPaused(true); }} className="w-9 h-9 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg transition-colors">
                             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="2" height="10" rx="1" fill="currentColor" className="text-white/60" /><path d="M13 2.5L5 7l8 4.5V2.5Z" fill="currentColor" className="text-white/60" /></svg>
                           </button>
-                          <button onClick={() => paused ? videoRef.current?.play() : videoRef.current?.pause()} className="px-6 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors">{paused ? 'Play' : 'Pause'}</button>
+                          <button onClick={() => { const av = getAV(); paused ? av?.play() : av?.pause(); }} className="px-6 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors">{paused ? 'Play' : 'Pause'}</button>
                         </div>
 
                         <div className="flex justify-center items-center gap-3">
@@ -563,24 +627,24 @@ export default function ReelsCutterPage() {
 
                         {/* Seek bar */}
                         <div className="relative w-full h-10 md:h-6 flex items-center cursor-pointer" style={{ touchAction: 'none' }}
-                          onClick={(e) => { if (!videoRef.current) return; const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                          onClick={(e) => { const av = getAV(); if (!av) return; const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); av.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
                         >
                           <div className="relative w-full h-[3px] bg-white/[0.08] rounded-full pointer-events-none">
                             <div className="absolute left-0 top-0 h-full bg-[#D4AF37]/50 rounded-full" style={{ width: `${(currentTime / duration) * 100}%` }} />
                           </div>
                           <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 md:w-3 md:h-3 rounded-full bg-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.45)] cursor-grab active:cursor-grabbing pointer-events-auto" style={{ left: `${(currentTime / duration) * 100}%` }}
                             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); seekDraggingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); }}
-                            onPointerMove={(e) => { if (!seekDraggingRef.current || !videoRef.current) return; const rect = (e.currentTarget.parentElement as HTMLDivElement).getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
-                            onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); if (videoRef.current && !videoRef.current.paused) startLoop(); }}
+                            onPointerMove={(e) => { const av = getAV(); if (!seekDraggingRef.current || !av) return; const rect = (e.currentTarget.parentElement as HTMLDivElement).getBoundingClientRect(); av.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                            onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); const av = getAV(); if (av && !av.paused) startLoop(); }}
                           />
                         </div>
 
                         {/* Play controls */}
                         <div className="flex justify-center items-center gap-3">
-                          <button onClick={() => { const v = videoRef.current; const segs = segmentsRef.current; if (!v) return; v.pause(); v.currentTime = segs?.[0]?.start ?? 0; setPaused(true); }} className="w-9 h-9 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg transition-colors">
+                          <button onClick={() => { const v = getAV(); const segs = segmentsRef.current; if (!v) return; v.pause(); v.currentTime = segs?.[0]?.start ?? 0; setPaused(true); }} className="w-9 h-9 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg transition-colors">
                             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="2" height="10" rx="1" fill="currentColor" className="text-white/60" /><path d="M13 2.5L5 7l8 4.5V2.5Z" fill="currentColor" className="text-white/60" /></svg>
                           </button>
-                          <button onClick={() => paused ? videoRef.current?.play() : videoRef.current?.pause()} className="px-6 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors">{paused ? 'Play' : 'Pause'}</button>
+                          <button onClick={() => { const av = getAV(); paused ? av?.play() : av?.pause(); }} className="px-6 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors">{paused ? 'Play' : 'Pause'}</button>
                         </div>
 
                         {/* Zoom settings */}
@@ -604,24 +668,24 @@ export default function ReelsCutterPage() {
 
                         {/* Seek bar */}
                         <div className="relative w-full h-10 md:h-6 flex items-center cursor-pointer" style={{ touchAction: 'none' }}
-                          onClick={(e) => { if (!videoRef.current) return; const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                          onClick={(e) => { const av = getAV(); if (!av) return; const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect(); av.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
                         >
                           <div className="relative w-full h-[3px] bg-white/[0.08] rounded-full pointer-events-none">
                             <div className="absolute left-0 top-0 h-full bg-[#D4AF37]/50 rounded-full" style={{ width: `${(currentTime / duration) * 100}%` }} />
                           </div>
                           <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 md:w-3 md:h-3 rounded-full bg-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.45)] cursor-grab active:cursor-grabbing pointer-events-auto" style={{ left: `${(currentTime / duration) * 100}%` }}
                             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); seekDraggingRef.current = true; e.currentTarget.setPointerCapture(e.pointerId); }}
-                            onPointerMove={(e) => { if (!seekDraggingRef.current || !videoRef.current) return; const rect = (e.currentTarget.parentElement as HTMLDivElement).getBoundingClientRect(); videoRef.current.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
-                            onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); if (videoRef.current && !videoRef.current.paused) startLoop(); }}
+                            onPointerMove={(e) => { const av = getAV(); if (!seekDraggingRef.current || !av) return; const rect = (e.currentTarget.parentElement as HTMLDivElement).getBoundingClientRect(); av.currentTime = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1)) * duration; }}
+                            onPointerUp={(e) => { seekDraggingRef.current = false; e.currentTarget.releasePointerCapture(e.pointerId); const av = getAV(); if (av && !av.paused) startLoop(); }}
                           />
                         </div>
 
                         {/* Play controls */}
                         <div className="flex justify-center items-center gap-3">
-                          <button onClick={() => { const v = videoRef.current; const segs = segmentsRef.current; if (!v) return; v.pause(); v.currentTime = segs?.[0]?.start ?? 0; setPaused(true); }} className="w-9 h-9 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg transition-colors">
+                          <button onClick={() => { const v = getAV(); const segs = segmentsRef.current; if (!v) return; v.pause(); v.currentTime = segs?.[0]?.start ?? 0; setPaused(true); }} className="w-9 h-9 flex items-center justify-center bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg transition-colors">
                             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="2" height="10" rx="1" fill="currentColor" className="text-white/60" /><path d="M13 2.5L5 7l8 4.5V2.5Z" fill="currentColor" className="text-white/60" /></svg>
                           </button>
-                          <button onClick={() => paused ? videoRef.current?.play() : videoRef.current?.pause()} className="px-6 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors">{paused ? 'Play' : 'Pause'}</button>
+                          <button onClick={() => { const av = getAV(); paused ? av?.play() : av?.pause(); }} className="px-6 py-2 bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] rounded-lg text-[9px] uppercase tracking-widest transition-colors">{paused ? 'Play' : 'Pause'}</button>
                         </div>
 
                         {/* Word cards — auto-scrolls to active word */}
