@@ -31,6 +31,7 @@ function remapToExportTime(
 }
 
 export default function ReelsCutterPage() {
+  const [authChecking, setAuthChecking] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState(false);
@@ -69,6 +70,21 @@ export default function ReelsCutterPage() {
   const lastSegIdxRef = useRef(-1);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDraggingRef = useRef(false);
+
+  useEffect(() => {
+    import('./supabaseClient').then(({ supabase }) => {
+      supabase.auth.getSession().then(({ data: { session } }: { data: { session: unknown } }) => {
+        if (session) {
+          setAuthChecking(false);
+        } else {
+          supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: window.location.href },
+          });
+        }
+      });
+    });
+  }, []);
 
   useEffect(() => {
     if (document.cookie.includes('session_access=granted')) {
@@ -338,6 +354,19 @@ export default function ReelsCutterPage() {
       const a = document.createElement('a'); a.href = url; a.download = `deVee_${videoFile.name}.mp4`; a.click();
     } catch (e) { setStatus("Error"); } finally { setProcessing(false); }
   };
+
+  if (authChecking) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, backgroundColor: '#000',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <p style={{ color: '#fff', fontSize: '1.125rem', fontFamily: 'sans-serif' }}>
+          Verifying Access to deVee Tools...
+        </p>
+      </div>
+    );
+  }
 
   if (!authorized) {
     return (
